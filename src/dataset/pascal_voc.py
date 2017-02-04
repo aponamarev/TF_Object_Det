@@ -7,9 +7,9 @@ import os
 import numpy as np
 import xml.etree.ElementTree as ET
 
-from utils.util import bbox_transform_inv
-from dataset.imdb import imdb
-from dataset.voc_eval import voc_eval
+from src.utils.util import bbox_transform_inv
+from src.dataset.imdb import imdb
+from src.dataset.voc_eval import voc_eval
 
 class pascal_voc(imdb):
   def __init__(self, image_set, year, data_path, mc):
