@@ -240,7 +240,7 @@ def convertToFixedSize(aidx_per_batch, label_per_batch, box_delta_per_batch, bbo
     label_counter = 0
     num_discarded_labels = 0
     for im_num in xrange(len(label_per_batch)):
-        for lbl_num in xrange(len(label_per_batch)):
+        for lbl_num in xrange(len(label_per_batch[im_num])):
             label_counter += 1
             # To keep a track of added label/anchors create a list of anchors
             # (for each image [i]) corresponding to objects
