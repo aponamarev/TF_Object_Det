@@ -228,5 +228,37 @@ def safe_exp(w, thresh):
 
     out = lin_region*lin_out + (1.-lin_region)*exp_out
   return out
+def convertToFixedSize(aidx_per_batch, label_per_batch, box_delta_per_batch, bbox_per_batch):
+    """Convert a 2d arrays of inconsistent size (varies based on n of objests) into
+    a list of tuples or triples to keep the consistent dimensionality across all
+    images (invariant to the number of objects)"""
+
+    label_indices, bbox_indices, box_delta_values, mask_indices, box_values = [], [], [], [], []
+
+    # Initialize a tracker of unique [img_ids, anchor] tuples and counter of labels
+    aidx_set = set()
+    label_counter = 0
+    num_discarded_labels = 0
+    for im_num in xrange(len(label_per_batch)):
+        for lbl_num in xrange(len(label_per_batch)):
+            label_counter += 1
+            # To keep a track of added label/anchors create a list of anchors
+            # (for each image [i]) corresponding to objects
+            if (im_num, aidx_per_batch[im_num][lbl_num]) not in aidx_set:
+                aidx_set.add((im_num, aidx_per_batch[im_num][lbl_num]))
+                # 2. Create a list of unique objects in the batch through triples [im_index, anchor, label]
+                label_indices.append([im_num,
+                                      aidx_per_batch[im_num][lbl_num],
+                                      label_per_batch[im_num][lbl_num]])
+                mask_indices.append([im_num,
+                                      aidx_per_batch[im_num][lbl_num]])
+                # For bounding boxes dublicate [im_num, anchor_id] 4 times (one time of each coordinates x,y,w,h
+                bbox_indices.extend([[im_num, aidx_per_batch[im_num][lbl_num], k] for k in range(4)])
+                box_delta_values.extend(box_delta_per_batch[im_num][lbl_num])
+                box_values.extend(bbox_per_batch[im_num][lbl_num])
+            else:
+                num_discarded_labels += 1
+    return label_indices, bbox_indices, box_delta_values, mask_indices, box_values
+
 
 
