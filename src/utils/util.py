@@ -244,18 +244,19 @@ def convertToFixedSize(aidx_per_batch, label_per_batch, box_delta_per_batch, bbo
             label_counter += 1
             # To keep a track of added label/anchors create a list of anchors
             # (for each image [i]) corresponding to objects
-            if (im_num, aidx_per_batch[im_num][lbl_num]) not in aidx_set:
-                aidx_set.add((im_num, aidx_per_batch[im_num][lbl_num]))
+            ojb_anchor_id = aidx_per_batch[im_num][lbl_num]
+            obj_label = label_per_batch[im_num][lbl_num]
+            box_deltas = box_delta_per_batch[im_num][lbl_num]
+            box_xyhw = bbox_per_batch[im_num][lbl_num]
+            if (im_num, ojb_anchor_id) not in aidx_set:
+                aidx_set.add((im_num, ojb_anchor_id))
                 # 2. Create a list of unique objects in the batch through triples [im_index, anchor, label]
-                label_indices.append([im_num,
-                                      aidx_per_batch[im_num][lbl_num],
-                                      label_per_batch[im_num][lbl_num]])
-                mask_indices.append([im_num,
-                                      aidx_per_batch[im_num][lbl_num]])
+                label_indices.append([im_num, ojb_anchor_id, obj_label])
+                mask_indices.append([im_num, ojb_anchor_id])
                 # For bounding boxes dublicate [im_num, anchor_id] 4 times (one time of each coordinates x,y,w,h
-                bbox_indices.extend([[im_num, aidx_per_batch[im_num][lbl_num], k] for k in range(4)])
-                box_delta_values.extend(box_delta_per_batch[im_num][lbl_num])
-                box_values.extend(bbox_per_batch[im_num][lbl_num])
+                bbox_indices.extend([[im_num, ojb_anchor_id, xywh] for xywh in range(4)])
+                box_delta_values.extend(box_deltas)
+                box_values.extend(box_xyhw)
             else:
                 num_discarded_labels += 1
     return label_indices, bbox_indices, box_delta_values, mask_indices, box_values
