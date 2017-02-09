@@ -128,7 +128,7 @@ class imdb(object):
 
     image_per_batch = []
     label_per_batch = []
-    bbox_per_batch  = []
+    gtbox_per_batch  = []
     delta_per_batch = []
     aidx_per_batch  = []
     if mc.DEBUG_MODE:
@@ -140,14 +140,14 @@ class imdb(object):
 
     for idx in batch_idx:
       # load the image
-      im = cv2.imread(self._image_path_at(idx)).astype(np.float32, copy=False)
-      im -= mc.BGR_MEANS
+      one_img = cv2.imread(self._image_path_at(idx)).astype(np.float32, copy=False)
+      one_img -= mc.BGR_MEANS
       # Image hight and width
-      orig_h, orig_w, _ = [float(v) for v in im.shape]
+      orig_h, orig_w, _ = [float(v) for v in one_img.shape]
 
       # load annotations
       label_per_batch.append([b[4] for b in self._rois[idx][:]])
-      gt_bbox = np.array([[b[0], b[1], b[2], b[3]] for b in self._rois[idx][:]])
+      gtbboxes_per_img = np.array([[b[0], b[1], b[2], b[3]] for b in self._rois[idx][:]])
 
       if mc.DATA_AUGMENTATION:
         assert mc.DRIFT_X >= 0 and mc.DRIFT_Y > 0, \
@@ -155,16 +155,16 @@ class imdb(object):
 
         if mc.DRIFT_X > 0 or mc.DRIFT_Y > 0:
           # Ensures that gt boundibg box is not cutted out of the image
-          max_drift_x = min(gt_bbox[:, 0] - gt_bbox[:, 2]/2.0+1)
-          max_drift_y = min(gt_bbox[:, 1] - gt_bbox[:, 3]/2.0+1)
+          max_drift_x = min(gtbboxes_per_img[:, 0] - gtbboxes_per_img[:, 2]/2.0+1)
+          max_drift_y = min(gtbboxes_per_img[:, 1] - gtbboxes_per_img[:, 3]/2.0+1)
           assert max_drift_x >= 0 and max_drift_y >= 0, 'bbox out of image'
 
           dy = np.random.randint(-mc.DRIFT_Y, min(mc.DRIFT_Y+1, max_drift_y))
           dx = np.random.randint(-mc.DRIFT_X, min(mc.DRIFT_X+1, max_drift_x))
 
           # shift bbox
-          gt_bbox[:, 0] = gt_bbox[:, 0] - dx
-          gt_bbox[:, 1] = gt_bbox[:, 1] - dy
+          gtbboxes_per_img[:, 0] = gtbboxes_per_img[:, 0] - dx
+          gtbboxes_per_img[:, 1] = gtbboxes_per_img[:, 1] - dy
 
           # distort image
           orig_h -= dy
@@ -174,30 +174,30 @@ class imdb(object):
 
           distorted_im = np.zeros(
               (int(orig_h), int(orig_w), 3)).astype(np.float32)
-          distorted_im[dist_y:, dist_x:, :] = im[orig_y:, orig_x:, :]
-          im = distorted_im
+          distorted_im[dist_y:, dist_x:, :] = one_img[orig_y:, orig_x:, :]
+          one_img = distorted_im
 
         # Flip image with 50% probability
         if np.random.randint(2) > 0.5:
-          im = im[:, ::-1, :]
-          gt_bbox[:, 0] = orig_w - 1 - gt_bbox[:, 0]
+          one_img = one_img[:, ::-1, :]
+          gtbboxes_per_img[:, 0] = orig_w - 1 - gtbboxes_per_img[:, 0]
 
       # scale image
-      im = cv2.resize(im, (mc.IMAGE_WIDTH, mc.IMAGE_HEIGHT))
-      image_per_batch.append(im)
+      one_img = cv2.resize(one_img, (mc.IMAGE_WIDTH, mc.IMAGE_HEIGHT))
+      image_per_batch.append(one_img)
 
       # scale annotation
       # scales the coordinates to match feature output size [22x76]
       x_scale = mc.IMAGE_WIDTH/orig_w
       y_scale = mc.IMAGE_HEIGHT/orig_h
-      gt_bbox[:, 0::2] = gt_bbox[:, 0::2]*x_scale
-      gt_bbox[:, 1::2] = gt_bbox[:, 1::2]*y_scale
-      bbox_per_batch.append(gt_bbox)
+      gtbboxes_per_img[:, 0::2] = gtbboxes_per_img[:, 0::2]*x_scale
+      gtbboxes_per_img[:, 1::2] = gtbboxes_per_img[:, 1::2]*y_scale
+      gtbox_per_batch.append(gtbboxes_per_img)
 
       aidx_per_image, delta_per_image = [], []
       aidx_set = set()
-      for i in range(len(gt_bbox)):
-        overlaps = batch_iou(mc.ANCHOR_BOX, gt_bbox[i])
+      for i in range(len(gtbboxes_per_img)):
+        overlaps = batch_iou(mc.ANCHOR_BOX, gtbboxes_per_img[i])
 
         aidx = len(mc.ANCHOR_BOX)
         for ov_idx in np.argsort(overlaps)[::-1]:
@@ -220,14 +220,14 @@ class imdb(object):
         if aidx == len(mc.ANCHOR_BOX): 
           # even the largeset available overlap is 0, thus, choose one with the
           # smallest square distance
-          dist = np.sum(np.square(gt_bbox[i] - mc.ANCHOR_BOX), axis=1)
+          dist = np.sum(np.square(gtbboxes_per_img[i] - mc.ANCHOR_BOX), axis=1)
           for dist_idx in np.argsort(dist):
             if dist_idx not in aidx_set:
               aidx_set.add(dist_idx)
               aidx = dist_idx
               break
         
-        box_cx, box_cy, box_w, box_h = gt_bbox[i]
+        box_cx, box_cy, box_w, box_h = gtbboxes_per_img[i]
         delta = [0]*4
         delta[0] = (box_cx - mc.ANCHOR_BOX[aidx][0])/box_w
         delta[1] = (box_cy - mc.ANCHOR_BOX[aidx][1])/box_h
@@ -263,7 +263,7 @@ class imdb(object):
       print ('number of objects with 0 iou: {}'.format(num_zero_iou_obj))
 
     return image_per_batch, label_per_batch, delta_per_batch, \
-        aidx_per_batch, bbox_per_batch
+        aidx_per_batch, gtbox_per_batch
 
   def evaluate_detections(self):
     raise NotImplementedError
