@@ -1,11 +1,12 @@
 # enable import using multiline statements (useful when import many items in one statement)
 from __future__ import absolute_import
+import cv2
 import os
 import tensorflow as tf
 import numpy as np
 from src.utils.visualization import vis_img
 # import conversion from sparse to dense arrays
-from src.utils.util import sparse_to_dense, convertToFixedSize
+from src.utils.util import sparse_to_dense, convertToFixedSize, bbox_transform, bgr_to_rgb
 
 
 # setup flags that will be used throughout the algorithm
@@ -27,7 +28,7 @@ tf.app.flags.DEFINE_string('pretrained_model_path', '',
                        """Path to the pretrained model.""")
 
 # define training flags
-tf.app.flags.DEFINE_string('train_dir', '/Users/aponamaryov/GitHub/squeezeDet/logs/squeezeDet/train',
+tf.app.flags.DEFINE_string('train_dir', './logs/squeezeDet/train',
                         """Directory where to write event logs and checkpoint.""")
 tf.app.flags.DEFINE_integer('max_steps', 1000000,
                         """Maximum number of batches to run.""")
@@ -36,6 +37,52 @@ tf.app.flags.DEFINE_integer('summary_step', 10,
 tf.app.flags.DEFINE_integer('checkpoint_step', 1000,
                         """Number of steps to save summary.""")
 tf.app.flags.DEFINE_string('gpu', '0', """gpu id.""")
+
+def _draw_box(im, box_list, label_list, color=(0,255,0), cdict=None, form='center'):
+    assert form == 'center' or form == 'diagonal', 'bounding box format not accepted: {}.'.format(form)
+
+    for bbox, label in zip(box_list, label_list):
+
+        if form == 'center':
+            bbox = bbox_transform(bbox)
+
+        xmin, ymin, xmax, ymax = [int(b) for b in bbox]
+
+        l = label.split(':')[0] # text before "CLASS: (PROB)"
+        if cdict and l in cdict:
+            c = cdict[l]
+        else:
+            c = color
+
+        # draw box
+        cv2.rectangle(im, (xmin, ymin), (xmax, ymax), c, 1)
+        # draw label
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        cv2.putText(im, label, (xmin, ymax), font, 0.3, c, 1)
+
+def _viz_prediction_result(model, images, bboxes, labels, batch_det_bbox,
+                           batch_det_class, batch_det_prob):
+    mc = model.mc
+
+    for i in range(len(images)):
+        # draw ground truth
+        _draw_box(images[i], bboxes[i], [mc.CLASS_NAMES[idx] for idx in labels[i]], (0, 255, 0))
+
+        # draw prediction
+        det_bbox, det_prob, det_class = model.filter_prediction(
+            batch_det_bbox[i], batch_det_prob[i], batch_det_class[i])
+
+        keep_idx    = [idx for idx in range(len(det_prob)) \
+                          if det_prob[idx] > mc.PLOT_PROB_THRESH]
+        det_bbox    = [det_bbox[idx] for idx in keep_idx]
+        det_prob    = [det_prob[idx] for idx in keep_idx]
+        det_class   = [det_class[idx] for idx in keep_idx]
+
+        _draw_box(
+            images[i], det_bbox,
+            [mc.CLASS_NAMES[idx]+': (%.2f)'% prob \
+                for idx, prob in zip(det_class, det_prob)],
+            (0, 0, 255))
 
 def defineComputGraph(FLAGS):
     """
@@ -100,10 +147,15 @@ def train():
 
         tf.train.start_queue_runners(sess=sess)
 
+        summary_writer = tf.train.SummaryWriter(FLAGS.train_dir, sess.graph)
+
         for step in xrange(FLAGS.max_steps):
             # 3. Read a minibatch of data
-            image_per_batch, label_per_batch, box_delta_per_batch, \
-            aidx_per_batch, bbox_per_batch = imdb.read_batch()
+            image_per_batch, \
+            label_per_batch, \
+            box_delta_per_batch, \
+            aidx_per_batch, \
+            gtbbox_per_batch = imdb.read_batch()
 
             # 4. Convert a 2d arrays of inconsistent size (varies based
             # on n of objests) into a list of tuples or tripples
@@ -115,7 +167,7 @@ def train():
                 aidx_per_batch=aidx_per_batch,
                 label_per_batch=label_per_batch,
                 box_delta_per_batch=box_delta_per_batch,
-                bbox_per_batch=bbox_per_batch
+                bbox_per_batch=gtbbox_per_batch
             )
 
             feed_dict = {
@@ -166,6 +218,15 @@ def train():
                 bbox_loss, \
                 class_loss = sess.run(op_list, feed_dict=feed_dict)
 
+                _viz_prediction_result(
+                    model, image_per_batch, gtbbox_per_batch, label_per_batch, det_boxes,
+                    det_class, det_probs)
+                image_per_batch = bgr_to_rgb(image_per_batch)
+                viz_summary = sess.run(
+                    model.viz_op, feed_dict={model.image_to_show: image_per_batch})
+                summary_writer.add_summary(summary_str, step)
+                summary_writer.add_summary(viz_summary, step)
+
             else:
                 _, \
                 loss_value, \
@@ -184,6 +245,9 @@ def train():
 
             # 6. Save the model checkpoint periodically.
             if step % FLAGS.checkpoint_step == 0 or (step + 1) == FLAGS.max_steps:
+                viz_summary = sess.run(model.viz_op, feed_dict={model.image_to_show: image_per_batch})
+                summary_writer.add_summary(summary_str, step)
+                summary_writer.add_summary(viz_summary, step)
                 checkpoint_path = os.path.join(FLAGS.train_dir, 'model.ckpt')
                 saver.save(sess, checkpoint_path, global_step=step)
 

@@ -88,10 +88,10 @@ class ModelSkeleton:
         tf.float32, [mc.BATCH_SIZE, mc.ANCHORS, 1], name='box_mask')
     # Tensor used to represent bounding box deltas.
     self.box_delta_input = tf.placeholder(
-        tf.float32, [mc.BATCH_SIZE, mc.ANCHORS, 4], name='box_delta_input')
+        tf.float32, [mc.BATCH_SIZE, mc.ANCHORS, 4], name='gt_bbox_delta_input')
     # Tensor used to represent bounding box coordinates.
     self.box_input = tf.placeholder(
-        tf.float32, [mc.BATCH_SIZE, mc.ANCHORS, 4], name='box_input')
+        tf.float32, [mc.BATCH_SIZE, mc.ANCHORS, 4], name='gt_box_values_input')
     # Tensor used to represent labels
     self.labels = tf.placeholder(
         tf.float32, [mc.BATCH_SIZE, mc.ANCHORS, mc.CLASSES], name='labels')
@@ -121,10 +121,19 @@ class ModelSkeleton:
     """Interpret NN output."""
     mc = self.mc
 
-    with tf.variable_scope('interpret_output') as scope:
+    with tf.variable_scope('interpret_class_conf_delta_preds') as scope:
       preds = self.preds
+      # number of object. Used to normalize bbox and classification loss
+      '''
+        # A tensor where an element is 1 if the corresponding box is "responsible"
+        # for detection an object and 0 otherwise.
+        self.input_mask = tf.placeholder(
+        tf.float32, [mc.BATCH_SIZE, mc.ANCHORS, 1], name='box_mask')
+      '''
+      self.num_objects = tf.reduce_sum(self.input_mask, name='num_objects')
 
-      # probability
+    # probability
+    with tf.variable_scope('pred_class_probs') as scope:
       num_class_probs = mc.ANCHOR_PER_GRID*mc.CLASSES
       # This part carves out layers responsible for class probabilities in every box (3_classes * 9_boxes)
       self.pred_class_probs = tf.reshape(
@@ -138,8 +147,9 @@ class ModelSkeleton:
           name='pred_class_probs'
       )
       
-      # confidence
-      # This part carves out layers for confidence per easy box
+    # confidence
+    with tf.variable_scope('pred_confidence_score') as scope:
+      # This part carves out layers for confidence per each box
       num_confidence_scores = mc.ANCHOR_PER_GRID+num_class_probs
       self.pred_conf = tf.sigmoid(
           tf.reshape(
@@ -149,24 +159,16 @@ class ModelSkeleton:
           name='pred_confidence_score'
       )
 
-      # bbox_delta
+    # bbox_delta
+    with tf.variable_scope('pred_bbox_delta') as scope:
       # This last part carves out layers responsible of delta calcs
       self.pred_box_delta = tf.reshape(
           preds[:, :, :, num_confidence_scores:],
           [mc.BATCH_SIZE, mc.ANCHORS, 4],
-          name='bbox_delta'
+          name='pred_bbox_delta'
       )
 
-      # number of object. Used to normalize bbox and classification loss
-      '''
-        # A tensor where an element is 1 if the corresponding box is "responsible"
-        # for detection an object and 0 otherwise.
-        self.input_mask = tf.placeholder(
-        tf.float32, [mc.BATCH_SIZE, mc.ANCHORS, 1], name='box_mask')
-      '''
-      self.num_objects = tf.reduce_sum(self.input_mask, name='num_objects')
-
-    with tf.variable_scope('bbox') as scope:
+    with tf.variable_scope('bbox_pred') as scope:
         with tf.variable_scope('stretching'):
             delta_x, delta_y, delta_w, delta_h = tf.unpack(
                 self.pred_box_delta, axis=2
@@ -204,35 +206,39 @@ class ModelSkeleton:
             self._activation_summary(box_height, 'bbox_height')
 
         with tf.variable_scope('trimming'):
-            """util.bbox_transform convert a bbox of form [cx, cy, w, h] to [xmin, ymin, xmax, ymax]. Works for numpy array or list of tensors."""
-            xmins, ymins, xmaxs, ymaxs = util.bbox_transform([box_center_x, box_center_y, box_width, box_height])
+            """util.bbox_transform convert a bbox of form [cx, cy, w, h]
+            to [xmin, ymin, xmax, ymax]. Works for numpy array or list of tensors."""
+            xmins, ymins, xmaxs, ymaxs = util.bbox_transform([box_center_x,
+                                                              box_center_y,
+                                                              box_width,
+                                                              box_height])
             '''
             This part makes sure that the predicted values do not extend beyond the images size
             '''
             # The max x position is mc.IMAGE_WIDTH - 1 since we use zero-based
             # pixels. Same for y.
             xmins = tf.minimum(
-                tf.maximum(0.0, xmins), mc.IMAGE_WIDTH-1.0, name='bbox_xmin')
-            self._activation_summary(xmins, 'box_xmin')
+                tf.maximum(0.0, xmins), mc.IMAGE_WIDTH-1.0, name='bbox_xmin_bbox_pred')
+            self._activation_summary(xmins, 'box_xmin_bbox_pred')
 
             ymins = tf.minimum(
-                tf.maximum(0.0, ymins), mc.IMAGE_HEIGHT-1.0, name='bbox_ymin')
-            self._activation_summary(ymins, 'box_ymin')
+                tf.maximum(0.0, ymins), mc.IMAGE_HEIGHT-1.0, name='bbox_ymin_bbox_pred')
+            self._activation_summary(ymins, 'box_ymin_bbox_pred')
 
             xmaxs = tf.maximum(
-                tf.minimum(mc.IMAGE_WIDTH-1.0, xmaxs), 0.0, name='bbox_xmax')
-            self._activation_summary(xmaxs, 'box_xmax')
+                tf.minimum(mc.IMAGE_WIDTH-1.0, xmaxs), 0.0, name='bbox_xmax_bbox_pred')
+            self._activation_summary(xmaxs, 'box_xmax_bbox_pred')
 
             ymaxs = tf.maximum(
-                tf.minimum(mc.IMAGE_HEIGHT-1.0, ymaxs), 0.0, name='bbox_ymax')
-            self._activation_summary(ymaxs, 'box_ymax')
+                tf.minimum(mc.IMAGE_HEIGHT-1.0, ymaxs), 0.0, name='bbox_ymax_bbox_pred')
+            self._activation_summary(ymaxs, 'box_ymax_bbox_pred')
 
             self.det_boxes = tf.transpose(
                 tf.pack(util.bbox_transform_inv([xmins, ymins, xmaxs, ymaxs])),
-                (1, 2, 0), name='bbox'
+                (1, 2, 0), name='bbox_pred_xmin_ymin_xmax_ymax'
             )
 
-    with tf.variable_scope('IOU'):
+    with tf.variable_scope('IOU_pred'):
       def _tensor_iou(box1, box2):
         with tf.variable_scope('intersection'):
           xmin = tf.maximum(box1[0], box2[0], name='xmin')
@@ -261,27 +267,30 @@ class ModelSkeleton:
               util.bbox_transform(tf.unpack(self.box_input, axis=2))
           )
       )
-      self._activation_summary(self.ious, 'conf_score')
+      self._activation_summary(self.ious, 'IOU_score')
 
-    with tf.variable_scope('probability') as scope:
+    with tf.variable_scope('probability_ClassAndConfidence') as scope:
       self._activation_summary(self.pred_class_probs, 'class_probs')
 
       probs = tf.mul(
           self.pred_class_probs,
           tf.reshape(self.pred_conf, [mc.BATCH_SIZE, mc.ANCHORS, 1]),
-          name='final_class_prob'
+          name='final_class_prob_IOUxclassProbability'
       )
 
-      self._activation_summary(probs, 'final_class_prob')
+      self._activation_summary(probs, 'final_class_prob_IOUxclassProbability')
 
-      self.det_probs = tf.reduce_max(probs, 2, name='score')
-      self.det_class = tf.argmax(probs, 2, name='class_idx')
+    with tf.variable_scope('score_maxOfIOUxClassProb') as scope:
+      self.det_probs = tf.reduce_max(probs, 2, name='score_maxOfIOUxClassProb')
+
+    with tf.variable_scope('class_idx_maxOfIOUxClassProb') as scope:
+      self.det_class = tf.argmax(probs, 2, name='class_idx_maxOfIOUxClassProb')
 
   def _add_loss_graph(self):
     """Define the loss operation."""
     mc = self.mc
 
-    with tf.variable_scope('class_regression') as scope:
+    with tf.variable_scope('LOSS_class') as scope:
       # cross-entropy: q * -log(p) + (1-q) * -log(1-p)
       # add a small value into log to prevent blowing up
       self.class_loss = tf.truediv(
@@ -294,7 +303,7 @@ class ModelSkeleton:
       )
       tf.add_to_collection('losses', self.class_loss)
 
-    with tf.variable_scope('confidence_score_regression') as scope:
+    with tf.variable_scope('LOSS_confidenceIOU-Conf') as scope:
       input_mask = tf.reshape(self.input_mask, [mc.BATCH_SIZE, mc.ANCHORS])
       self.conf_loss = tf.reduce_mean(
           tf.reduce_sum(
@@ -308,7 +317,7 @@ class ModelSkeleton:
       tf.add_to_collection('losses', self.conf_loss)
       tf.scalar_summary('mean iou', tf.reduce_sum(self.ious)/self.num_objects)
 
-    with tf.variable_scope('bounding_box_regression') as scope:
+    with tf.variable_scope('LOSS_bounding_box') as scope:
       self.bbox_loss = tf.truediv(
           tf.reduce_sum(
               mc.LOSS_COEF_BBOX * tf.square(

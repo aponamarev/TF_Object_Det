@@ -21,9 +21,9 @@ class SqueezeDet(ModelSkeleton):
     with tf.device('/gpu:{}'.format(gpu_id)):
       ModelSkeleton.__init__(self, mc) # Initializes inputs
 
-      self._add_forward_graph() #creates a simple network (with fire layers) with the last conv layer stored in
-      #self.pred. self.pred has 72 feature maps: 9_boxes * ( 3_classes + 4_deltas + 1_confidence_score )
-      self._add_interpretation_graph() #creates class probabilityes, bbox coordinates, and probabilities
+      self._add_forward_graph() # creates a simple network (with fire layers) with the last conv layer stored in
+      # self.pred. self.pred has 72 feature maps: 9_boxes * ( 3_classes + 4_deltas + 1_confidence_score )
+      self._add_interpretation_graph() # creates class probabilityes, bbox coordinates, and probabilities
       # includes a bunch of summary ops to capture the flow of roi calculation
       self._add_loss_graph()
       self._add_train_graph()
