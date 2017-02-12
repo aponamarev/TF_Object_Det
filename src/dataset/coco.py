@@ -143,7 +143,8 @@ class coco(object):
 
         for batch_element in xrange(mc.BATCH_SIZE):
             '''
-            3. Read an image
+            3. Read and resize an image
+                -
             '''
             print "Step {} executed without errors.".format(batch_element)
         return NotImplementedError
