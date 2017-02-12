@@ -19,42 +19,48 @@ class coco(object):
         self.__name = "coco_" + value
 
     images_path = "Path to be provided"
+    @property
+    def images_path(self):
+        assert os.path.exists(self.__images_path), "Invalid path: {}".format(self.__images_path)
+        return self.__images_path
+    @images_path.setter
+    def images_path(self, value):
+        full_path = os.path.join(self.path, value)
+        assert os.path.exists(full_path), "Invalid path: {}".format(full_path)
+        self.__images_path = full_path
+
     annotations_path = "Path to be provided"
+
     path = "Path to be provided"
     @property
     def path(self):
         assert os.path.exists(
-            self.__path), "Invalid path was provided for the data set. The following path doesn't exist: {}" \
-            .format(self.path)
+            self.__path), "Invalid path was provided for the data set. The following path doesn't exist: {}"\
+            .format(self.__path)
         return self.__path
-
     @path.setter
     def path(self, path):
         assert type(path) == str, "Invalid path name was provided. Path should be a string."
         assert os.path.exists(path), \
             "Invalid path was provided for the data set. The following path doesn't exist: {}" \
                 .format(path)
-        images = os.path.join(path, self.images_folder)
-        annotations = os.path.join(path, self.annotation_folder)
-        assert os.path.exists(images) and \
-               os.path.exists(annotations), \
-            "Invalid path ({}) was provided. Path should contain {} and {} subfolders." \
-                .format(path, self.images_folder, self.annotation_folder)
         self.__path = path
-        self.images_path = images
-        self.annotations_path = annotations
 
     annotations_file = "File name to be provided"
     @property
     def annotations_file(self):
+        assert os.path.exists(self.__annotations_file),\
+            "Invalid path was provided for the data set. The following path doesn't exist: {}"\
+            .format(self.__annotations_file)
         return self.__annotations_file
-
     @annotations_file.setter
     def annotations_file(self, value):
-        full_path = os.path.join(self.annotations_path, value)
-        assert os.path.exists(full_path), "File {} doesn't exis at path {}. Please provide a correct file name at {}" \
-            .format(value, full_path, self.annotations_path)
-        self.__annotations_file = full_path
+        full_path = os.path.join(self.path,
+                                 self.annotations_path)
+        file_path = os.path.join(full_path, value)
+        assert os.path.exists(file_path), "File {} doesn't exis at path {}. Please provide a correct file name at {}" \
+            .format(value, file_path, full_path)
+        self.__annotations_file = file_path
 
     def __init__(self, coco_name, coco_path, main_controller):
         """
@@ -70,9 +76,9 @@ class coco(object):
         assert type(main_controller.BATCH_SIZE)==int and main_controller.BATCH_SIZE>0, "Incorrect mc.batch_size"
         self.mc = main_controller
         #1. Get an array of image indicies
-        self.images_folder = 'images'
-        self.annotation_folder = 'annotations'
         self.path = coco_path
+        self.images_path = 'images'
+        self.annotations_path = 'annotations'
         assert type(mc.ANNOTATIONS_FILE_NAME)==str, "Provide a name of the file containing annotations"
         self.annotations_file = mc.ANNOTATIONS_FILE_NAME
         self.coco = COCO(self.annotations_file)
