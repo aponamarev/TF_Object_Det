@@ -89,12 +89,12 @@ class Resize(object):
 
 
 if __name__ == '__main__':
+    from src.dataset import ImRead
+    imread = ImRead()
     path = '/Users/aponamaryov/Downloads/coco_train_2014/images/COCO_train2014_000000000659.jpg'
 
     rsize = Resize(dimensinos=(1000, 500))
-    im = cv2.imread(path, cv2.IMREAD_COLOR)
-    b,g,r = cv2.split(im)
-    im = cv2.merge([r,g,b])
+    im = imread.read(path)
     plt.imshow(misc.toimage(im))
     resized_im = rsize.imResize(im)
     plt.imshow(misc.toimage(resized_im))
