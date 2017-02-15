@@ -181,7 +181,7 @@ class coco(object):
 
         return image_per_batch, label_per_batch, gtbox_per_batch
     def visualization(self, im, labels=None, bboxes=None):
-        text_bound = 1
+        text_bound = 3
         fontScale = 0.4
         thickness = 2
         font = cv2.FONT_HERSHEY_SIMPLEX
