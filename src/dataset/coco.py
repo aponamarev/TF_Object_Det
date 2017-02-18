@@ -2,11 +2,8 @@
 COCO class is an adapter for coco dataset that ensures campatibility with ConvDet layer logic
 """
 import os, cv2
-import numpy as np
-from matplotlib import pyplot as plt
 from random import shuffle
-from src.dataset.pycocotools.coco import COCO
-from easydict import EasyDict as edict
+from pycocotools.coco import COCO
 from imdb_template import imdb_template as IMDB
 # Syntax: class(object) create a class inheriting from an object to allow new stype variable management
 class coco(IMDB):
@@ -180,7 +177,7 @@ class coco(IMDB):
                 cx2, cy2 = int(cx + w / 2.0), int(cy + h / 2.0)
                 cv2.rectangle(im, (cx1, cy1), (cx2, cy2), color=256, thickness=1)
                 if not labels==None:
-                    txt = "Tag: {}".format(self.CLASSES[labels[idx]])
+                    txt = "Tag: {}".format(self.BATCH_CLASSES[labels[idx]])
                     txtSize = cv2.getTextSize(txt, font, fontScale, thickness)[0]
                     cv2.putText(im, txt,
                                 (int((cx1+cx2-txtSize[0])/2.0),
@@ -190,6 +187,10 @@ class coco(IMDB):
         plt.imshow(im)
 
 if __name__ == "__main__":
+
+    from matplotlib import pyplot as plt
+    from easydict import EasyDict as edict
+
     mc = edict()
     mc.BATCH_SIZE = 10
     mc.ANNOTATIONS_FILE_NAME = 'instances_train2014.json'
