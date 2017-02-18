@@ -138,6 +138,16 @@ class coco(IMDB):
             "Provide a list of classes to be learned in this batch through mc.BATCH_CLASSES"
         self.BATCH_CLASSES = mc.BATCH_CLASSES
 
+    def provide_img_file_name(self, id):
+        """
+        Protocol describing the implementation of a method that provides the name of the image file based on
+        an image id.
+        :param id: dataset specific image id
+        :return: string containing file name
+        """
+        descriptions = self.coco.loadImgs(id)[0]
+        return descriptions['file_name']
+
 
     def read_batch(self):
         """
@@ -162,11 +172,12 @@ class coco(IMDB):
             #1. Get img_ids
             img_ids = self.imgIds[batch_element]
             #2. Read the file name
+            file_name = self.provide_img_file_name(img_ids)
+
+
             ann_ids = self.coco.getAnnIds(imgIds=[img_ids],
                                           catIds=self.coco.getCatIds(catNms=self.BATCH_CLASSES)
                                           )
-            descriptions = self.coco.loadImgs(img_ids)[0]
-            file_name = descriptions['file_name']
             #3. Read and resize an image and annotations
             file_path = os.path.join(self.images_path, file_name)
             try:
