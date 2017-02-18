@@ -3,7 +3,7 @@
 General image database wrapper that provides a common methods for image processing
 """
 import numpy as np
-import sys
+import sys, os
 from src.utils.util import batch_iou
 from ImRead import ImRead
 from Resize import Resize
@@ -13,12 +13,53 @@ class imdb_template(object):
     anchors = []
     INPUT_RES = None
     FEATURE_MAP_SIZE = None
+    IMAGES_PATH = "path to be provided"
 
-    def __init__(self, resize_dim=(1024, 1024), feature_map_size=(32, 32)):
+    def __init__(self, main_controller, resize_dim=(1024, 1024), feature_map_size=(32, 32)):
+        self.mc = main_controller
         self.FEATURE_MAP_SIZE = feature_map_size  # width, height
         self.INPUT_RES = resize_dim  # width, height
         self.imread = ImRead()
         self.resize = Resize(dimensinos=resize_dim)
+
+    @property
+    def mc(self):
+        return self.__mc
+
+    @mc.setter
+    def mc(self, main_controller):
+        try:
+            assert type(main_controller.OUTPUT_RES) == list, \
+                "Please provde the output resolution mc.OUTPUT_RES that describes feature maps size of FCN as a list [width, height]. Will be used for bbox setup"
+        except:
+            assert False,\
+                "Please provde the output resolution mc.OUTPUT_RES that describes feature maps size of FCN. Will be used for bbox setup"
+
+        try:
+            assert type(main_controller.BATCH_SIZE) == int and main_controller.BATCH_SIZE > 0, "Incorrect mc.batch_size"
+        except:
+            assert False, "Incorrect mc.batch_size"
+
+        try:
+            assert type(main_controller.IMAGES_PATH) == str,\
+                "Incorrect images path was provided. mc.IMAGES_PATH should be provided."
+        except:
+            assert False,\
+                "Incorrect images path was provided. mc.IMAGES_PATH should be provided."
+
+        self.__mc = main_controller
+        self.IMAGES_PATH = main_controller.IMAGES_PATH
+
+    @property
+    def IMAGES_PATH(self):
+        assert os.path.exists(self.__IMAGES_PATH), "Invalid path: {}".format(self.__IMAGES_PATH)
+        return self.__IMAGES_PATH
+    @IMAGES_PATH.setter
+    def IMAGES_PATH(self, value):
+        assert os.path.exists(value), "Invalid path: {}".format(value)
+        self.__IMAGES_PATH = value
+
+    annotations_path = "Path to be provided"
 
     @property
     def INPUT_RES(self):
@@ -184,6 +225,16 @@ class imdb_template(object):
         :param id: dataset specific image id
         :return: an array containing the list of bounding boxes with the following format
         [center_x, center_y, width, height]
+        """
+        raise NotImplementedError
+
+    def provide_img_id(self, id):
+        """
+        Protocol describing the implementation of a method that provides image id
+        for the dataset. This image id will be used in all subsequent methods.
+        Should be implemented for each of the datasets separately
+        :param id: id of the array
+        :return: an id within image available image ids.
         """
         raise NotImplementedError
 
