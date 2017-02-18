@@ -148,6 +148,25 @@ class coco(IMDB):
         descriptions = self.coco.loadImgs(id)[0]
         return descriptions['file_name']
 
+    def provide_img_tags(self, id):
+        """
+        Protocol describing the implementation of a method that provides tags for the image file based on
+        an image id.
+        :param id: dataset specific image id
+        :return: an array containing the list of tags
+        """
+
+        # Extract annotation ids
+        ann_ids = self.coco.getAnnIds(imgIds=[id],
+                                      catIds=self.coco.getCatIds(catNms=self.BATCH_CLASSES)
+                                      )
+        # get all annotations available
+        anns = self.coco.loadAnns(ids=ann_ids)
+        # parse annotations into a list
+        labels = [ann['category_id'] for ann in anns]
+
+        return labels
+
 
     def read_batch(self):
         """
@@ -165,17 +184,17 @@ class coco(IMDB):
 
         for batch_element in xrange(mc.BATCH_SIZE):
             '''
-            1. Get img_ids
+            1. Get img_id
             2. Read the file name and annotations
             3. Read and resize an image and annotations
             '''
-            #1. Get img_ids
-            img_ids = self.imgIds[batch_element]
+            #1. Get img_id
+            img_id = self.imgIds[batch_element]
             #2. Read the file name
-            file_name = self.provide_img_file_name(img_ids)
+            file_name = self.provide_img_file_name(img_id)
 
 
-            ann_ids = self.coco.getAnnIds(imgIds=[img_ids],
+            ann_ids = self.coco.getAnnIds(imgIds=[img_id],
                                           catIds=self.coco.getCatIds(catNms=self.BATCH_CLASSES)
                                           )
             #3. Read and resize an image and annotations
@@ -190,9 +209,8 @@ class coco(IMDB):
                                    bbox[2],
                                    bbox[3]
                                    ])
-                    category_ids.append(ann['category_id'])
                 image_per_batch.append(im)
-                label_per_batch.append(category_ids)
+                label_per_batch.append(self.provide_img_tags(img_id))
                 gtbox_per_batch.append(bboxes)
                 # provide anchor ids for each image
                 aids = self.find_anchor_ids(bboxes)
