@@ -237,7 +237,15 @@ class imdb_template(object):
         """
         raise NotImplementedError
 
-    def read_batch(self, gtbbox_flag=True):
+    def provide_epoch_size(self):
+        """
+        Protocol describing the implementation of a method that provides the size of the epoch.
+        Should be implemented for each of the datasets separately
+        :return: int - the size of the epoch
+        """
+        raise NotImplementedError
+
+    def read_batch(self, step, gtbbox_flag=True):
         """
         This function reads mc.batch_size images
 
@@ -250,8 +258,11 @@ class imdb_template(object):
         aids_per_batch,\
         deltas_per_batch = [],[],[],[],[]
         mc = self.mc
+        offset = (step * mc.BATCH_SIZE) % (self.provide_epoch_size() - 1)
+        start = offset
+        end = start + mc.BATCH_SIZE
 
-        for batch_element in xrange(mc.BATCH_SIZE):
+        for batch_element in xrange(start, end):
             '''
             1. Get img_id
             2. Read the file name and annotations
