@@ -1,15 +1,15 @@
 """
 COCO class is an adapter for coco dataset that ensures campatibility with ConvDet layer logic
 """
-import os
-import cv2
+import os, cv2
+import numpy as np
 from matplotlib import pyplot as plt
 from random import shuffle
 from src.dataset.pycocotools.coco import COCO
-from src.dataset import ImRead, Resize
 from easydict import EasyDict as edict
+from imdb_template import imdb_template as IMDB
 # Syntax: class(object) create a class inheriting from an object to allow new stype variable management
-class coco(object):
+class coco(IMDB):
     imgIds = []
     @property
     def imgIds(self):
@@ -103,7 +103,7 @@ class coco(object):
         # update image ids
         self.imgIds = id_array
 
-    def __init__(self, coco_name, coco_path, main_controller, shuffle=True, resize_dim=(800, 500)):
+    def __init__(self, coco_name, coco_path, main_controller, shuffle=True, resize_dim=(1024, 1024)):
         """
         COCO class is an adapter for coco dataset that ensures campatibility with ConvDet layer logic.
         The dataset should be initialized with:
@@ -114,12 +114,15 @@ class coco(object):
             - mc.ANNOTATIONS_FILE_NAME - a file name located in the coco_path/annotations
             - mc.BATCH_CLASSES - an array of classes to be learned (at least 1)
         """
+        assert not mc.OUTPUT_RES == None,\
+            "Please provde the output resolution mc.OUTPUT_RES that describes feature maps size of FCN. Will be used for bbox setup"
+
+        IMDB.__init__(self, resize_dim=resize_dim, feature_map_size=mc.OUTPUT_RES)
+
         self.name = coco_name
         self.shuffle = shuffle
         assert type(main_controller.BATCH_SIZE)==int and main_controller.BATCH_SIZE>0, "Incorrect mc.batch_size"
         self.mc = main_controller
-        self.imread = ImRead()
-        self.resize = Resize(dimensinos=resize_dim)
         #1. Get an array of image indicies
         self.path = coco_path
         self.images_path = 'images'
@@ -143,7 +146,11 @@ class coco(object):
         :return: image_per_batch, label_per_batch, delta_per_batch, \
         aidx_per_batch, gtbox_per_batch[cx,cy,w,h]
         """
-        image_per_batch, label_per_batch, gtbox_per_batch = [],[],[]
+        image_per_batch,\
+        label_per_batch,\
+        gtbox_per_batch,\
+        aids_per_batch,\
+        deltas_per_batch = [],[],[],[],[]
         mc = self.mc
 
         for batch_element in xrange(mc.BATCH_SIZE):
@@ -167,7 +174,7 @@ class coco(object):
                 bboxes, category_ids = [],[]
                 for id, ann in enumerate(self.coco.loadAnns(ids=ann_ids)):
                     bbox = self.resize.bboxResize(ann['bbox'])
-                    bboxes.append([bbox[0]+bbox[2]/2,
+                    bboxes.append([bbox[0] + bbox[2]/2,
                                    bbox[1] + bbox[3]/2,
                                    bbox[2],
                                    bbox[3]
@@ -176,10 +183,16 @@ class coco(object):
                 image_per_batch.append(im)
                 label_per_batch.append(category_ids)
                 gtbox_per_batch.append(bboxes)
+                # provide anchor ids for each image
+                aids = self.find_anchor_ids(bboxes)
+                # add image anchors to the batch
+                aids_per_batch.append(aids)
+                # calculate deltas for each anchor and add them to the delta_per_batch
+                deltas_per_batch.append(self.estimate_deltas(bboxes, aids))
             except:
                 pass
 
-        return image_per_batch, label_per_batch, gtbox_per_batch
+        return image_per_batch, label_per_batch, gtbox_per_batch, aids_per_batch, deltas_per_batch
     def visualization(self, im, labels=None, bboxes=None):
         text_bound = 3
         fontScale = 0.4
@@ -192,7 +205,7 @@ class coco(object):
                 cx2, cy2 = int(cx + w / 2.0), int(cy + h / 2.0)
                 cv2.rectangle(im, (cx1, cy1), (cx2, cy2), color=256, thickness=1)
                 if not labels==None:
-                    txt = "Tag: {}".format(labels[idx])
+                    txt = "Tag: {}".format(self.CLASSES[labels[idx]])
                     txtSize = cv2.getTextSize(txt, font, fontScale, thickness)[0]
                     cv2.putText(im, txt,
                                 (int((cx1+cx2-txtSize[0])/2.0),
@@ -206,15 +219,23 @@ if __name__ == "__main__":
     mc.BATCH_SIZE = 10
     mc.ANNOTATIONS_FILE_NAME = 'instances_train2014.json'
     mc.BATCH_CLASSES = ['person', 'car']
+    mc.OUTPUT_RES = (32,32)
     c = coco(coco_name="train",
              coco_path='/Users/aponamaryov/GitHub/coco',
              main_controller=mc)
     print "The name of the dataset: {}".format(c.name)
     print "The dataset is located at: {}".format(c.path)
     print "Batch provides images for:  \n", c.BATCH_CLASSES
-    image_per_batch, label_per_batch, gtbox_per_batch = c.read_batch()
+    image_per_batch,\
+    label_per_batch,\
+    gtbox_per_batch,\
+    aids_per_batch, \
+    deltas_per_batch = c.read_batch()
     for id, img in enumerate(image_per_batch):
         c.visualization(img, labels=label_per_batch[id], bboxes=gtbox_per_batch[id])
+        """anchors = [c.anchors[v] for v in aids_per_batch[id]]
+        c.visualization(img, labels=label_per_batch[id], bboxes=anchors)"""
+    print len(c.anchors)
     c.BATCH_CLASSES = ['person', 'dog', 'cat', 'car']
     print c.BATCH_CLASSES
     batch = c.read_batch()
