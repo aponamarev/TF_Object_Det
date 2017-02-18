@@ -36,34 +36,6 @@ class coco(IMDB):
             "Coco dataset name was not set correctly. Coco dataset should be initialized with a name: coco(name='train', path, mc)"""
         self.__name = "coco_" + value
 
-    images_path = "Path to be provided"
-    @property
-    def images_path(self):
-        assert os.path.exists(self.__images_path), "Invalid path: {}".format(self.__images_path)
-        return self.__images_path
-    @images_path.setter
-    def images_path(self, value):
-        full_path = os.path.join(self.path, value)
-        assert os.path.exists(full_path), "Invalid path: {}".format(full_path)
-        self.__images_path = full_path
-
-    annotations_path = "Path to be provided"
-
-    path = "Path to be provided"
-    @property
-    def path(self):
-        assert os.path.exists(
-            self.__path), "Invalid path was provided for the data set. The following path doesn't exist: {}"\
-            .format(self.__path)
-        return self.__path
-    @path.setter
-    def path(self, path):
-        assert type(path) == str, "Invalid path name was provided. Path should be a string."
-        assert os.path.exists(path), \
-            "Invalid path was provided for the data set. The following path doesn't exist: {}" \
-                .format(path)
-        self.__path = path
-
     annotations_file = "File name to be provided"
     @property
     def annotations_file(self):
@@ -114,29 +86,30 @@ class coco(IMDB):
             - mc.ANNOTATIONS_FILE_NAME - a file name located in the coco_path/annotations
             - mc.BATCH_CLASSES - an array of classes to be learned (at least 1)
         """
-        assert not mc.OUTPUT_RES == None,\
-            "Please provde the output resolution mc.OUTPUT_RES that describes feature maps size of FCN. Will be used for bbox setup"
 
-        IMDB.__init__(self, resize_dim=resize_dim, feature_map_size=mc.OUTPUT_RES)
+        IMDB.__init__(self, resize_dim=resize_dim,
+                      feature_map_size=main_controller.OUTPUT_RES,
+                      main_controller=main_controller)
 
         self.name = coco_name
         self.shuffle = shuffle
-        assert type(main_controller.BATCH_SIZE)==int and main_controller.BATCH_SIZE>0, "Incorrect mc.batch_size"
-        self.mc = main_controller
+
         #1. Get an array of image indicies
         self.path = coco_path
-        self.images_path = 'images'
         self.annotations_path = 'annotations'
-        assert type(mc.ANNOTATIONS_FILE_NAME)==str,\
+        assert type(main_controller.ANNOTATIONS_FILE_NAME)==str,\
             "Provide a name of the file containing annotations in mc.ANNOTATIONS_FILE_NAME"
-        self.annotations_file = mc.ANNOTATIONS_FILE_NAME
+        self.annotations_file = main_controller.ANNOTATIONS_FILE_NAME
         self.coco = COCO(self.annotations_file)
         categories = self.coco.loadCats(self.coco.getCatIds())
         self.CLASSES = [category['name'] for category in categories]
         self.CATEGORIES = set([category['supercategory'] for category in categories])
-        assert type(mc.BATCH_CLASSES) == list and len(mc.BATCH_CLASSES)>0,\
+        assert type(main_controller.BATCH_CLASSES) == list and len(main_controller.BATCH_CLASSES)>0,\
             "Provide a list of classes to be learned in this batch through mc.BATCH_CLASSES"
-        self.BATCH_CLASSES = mc.BATCH_CLASSES
+        self.BATCH_CLASSES = main_controller.BATCH_CLASSES
+
+    def provide_img_id(self, id):
+        return self.imgIds[id]
 
     def provide_img_file_name(self, id):
         """
@@ -145,6 +118,7 @@ class coco(IMDB):
         :param id: dataset specific image id
         :return: string containing file name
         """
+
         descriptions = self.coco.loadImgs(id)[0]
         return descriptions['file_name']
 
@@ -163,65 +137,34 @@ class coco(IMDB):
         # get all annotations available
         anns = self.coco.loadAnns(ids=ann_ids)
         # parse annotations into a list
-        labels = [ann['category_id'] for ann in anns]
+        return [ann['category_id'] for ann in anns]
 
-        return labels
-
-
-    def read_batch(self):
+    def provide_img_gtbboxes(self, id):
         """
-        This function reads mc.batch_size images
-
-        :return: image_per_batch, label_per_batch, delta_per_batch, \
-        aidx_per_batch, gtbox_per_batch[cx,cy,w,h]
+        Protocol describing the implementation of a method that provides ground truth bounding boxes
+        for the image file based on an image id.
+        :param id: dataset specific image id
+        :return: an array containing the list of bounding boxes with the following format
+        [center_x, center_y, width, height]
         """
-        image_per_batch,\
-        label_per_batch,\
-        gtbox_per_batch,\
-        aids_per_batch,\
-        deltas_per_batch = [],[],[],[],[]
-        mc = self.mc
+        bboxes = []
 
-        for batch_element in xrange(mc.BATCH_SIZE):
-            '''
-            1. Get img_id
-            2. Read the file name and annotations
-            3. Read and resize an image and annotations
-            '''
-            #1. Get img_id
-            img_id = self.imgIds[batch_element]
-            #2. Read the file name
-            file_name = self.provide_img_file_name(img_id)
+        # Extract annotation ids
+        ann_ids = self.coco.getAnnIds(imgIds=[id],
+                                      catIds=self.coco.getCatIds(catNms=self.BATCH_CLASSES)
+                                      )
+        # get all annotations available
+        anns = self.coco.loadAnns(ids=ann_ids)
+        # parse annotations into a list
+        for ann in anns:
+            bbox = self.resize.bboxResize(ann['bbox'])
+            bboxes.append([bbox[0] + bbox[2] / 2,
+                           bbox[1] + bbox[3] / 2,
+                           bbox[2],
+                           bbox[3]
+                           ])
+        return bboxes
 
-
-            ann_ids = self.coco.getAnnIds(imgIds=[img_id],
-                                          catIds=self.coco.getCatIds(catNms=self.BATCH_CLASSES)
-                                          )
-            #3. Read and resize an image and annotations
-            file_path = os.path.join(self.images_path, file_name)
-            try:
-                im = self.resize.imResize(self.imread.read(file_path))
-                bboxes, category_ids = [],[]
-                for id, ann in enumerate(self.coco.loadAnns(ids=ann_ids)):
-                    bbox = self.resize.bboxResize(ann['bbox'])
-                    bboxes.append([bbox[0] + bbox[2]/2,
-                                   bbox[1] + bbox[3]/2,
-                                   bbox[2],
-                                   bbox[3]
-                                   ])
-                image_per_batch.append(im)
-                label_per_batch.append(self.provide_img_tags(img_id))
-                gtbox_per_batch.append(bboxes)
-                # provide anchor ids for each image
-                aids = self.find_anchor_ids(bboxes)
-                # add image anchors to the batch
-                aids_per_batch.append(aids)
-                # calculate deltas for each anchor and add them to the delta_per_batch
-                deltas_per_batch.append(self.estimate_deltas(bboxes, aids))
-            except:
-                pass
-
-        return image_per_batch, label_per_batch, gtbox_per_batch, aids_per_batch, deltas_per_batch
     def visualization(self, im, labels=None, bboxes=None):
         text_bound = 3
         fontScale = 0.4
@@ -248,7 +191,8 @@ if __name__ == "__main__":
     mc.BATCH_SIZE = 10
     mc.ANNOTATIONS_FILE_NAME = 'instances_train2014.json'
     mc.BATCH_CLASSES = ['person', 'car']
-    mc.OUTPUT_RES = (32,32)
+    mc.OUTPUT_RES = (32, 32)
+    mc.IMAGES_PATH = '/Users/aponamaryov/Downloads/coco_train_2014/images'
     c = coco(coco_name="train",
              coco_path='/Users/aponamaryov/GitHub/coco',
              main_controller=mc)
@@ -258,7 +202,7 @@ if __name__ == "__main__":
     image_per_batch,\
     label_per_batch,\
     gtbox_per_batch,\
-    aids_per_batch, \
+    aids_per_batch,\
     deltas_per_batch = c.read_batch()
     for id, img in enumerate(image_per_batch):
         c.visualization(img, labels=label_per_batch[id], bboxes=gtbox_per_batch[id])
