@@ -159,3 +159,31 @@ class imdb_template(object):
             delta_per_img.append(delta)
         return delta_per_img
 
+    def provide_img_file_name(self, id):
+        """
+        Protocol describing the implementation of a method that provides the name of the image file based on
+        an image id. Should be implemented for each of the datasets separately
+        :param id: dataset specific image id
+        :return: string containing file name
+        """
+        raise NotImplementedError
+
+    def provide_img_tags(self, id):
+        """
+        Protocol describing the implementation of a method that provides tags for the image file based on
+        an image id. Should be implemented for each of the datasets separately
+        :param id: dataset specific image id
+        :return: an array containing the list of tags
+        """
+        raise NotImplementedError
+
+    def provide_img_gtbboxes(self, id):
+        """
+        Protocol describing the implementation of a method that provides ground truth bounding boxes
+        for the image file based on an image id. Should be implemented for each of the datasets separately
+        :param id: dataset specific image id
+        :return: an array containing the list of bounding boxes with the following format
+        [center_x, center_y, width, height]
+        """
+        raise NotImplementedError
+
