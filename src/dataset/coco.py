@@ -111,6 +111,9 @@ class coco(IMDB):
     def provide_img_id(self, id):
         return self.imgIds[id]
 
+    def provide_epoch_size(self):
+        return len(self.imgIds)
+
     def provide_img_file_name(self, id):
         """
         Protocol describing the implementation of a method that provides the name of the image file based on
@@ -203,7 +206,7 @@ if __name__ == "__main__":
     label_per_batch,\
     gtbox_per_batch,\
     aids_per_batch,\
-    deltas_per_batch = c.read_batch()
+    deltas_per_batch = c.read_batch(5377)
     for id, img in enumerate(image_per_batch):
         c.visualization(img, labels=label_per_batch[id], bboxes=gtbox_per_batch[id])
         """anchors = [c.anchors[v] for v in aids_per_batch[id]]
