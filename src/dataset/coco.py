@@ -54,9 +54,9 @@ class coco(IMDB):
     @BATCH_CLASSES.setter
     def BATCH_CLASSES(self, values):
         for value in values:
-            assert value in self.CLASSES,\
+            assert value in self.CLASS_NAMES_AVAILABLE,\
                 "BATCH_CLASSES array is incorrect. The following class (from the array) " + \
-                "is not present in self.CLASSES array: {}.".\
+                "is not present in self.CLASS_NAMES_AVAILABLE array: {}.".\
                 format(value)
         self.__BATCH_CLASSES = values
 
@@ -94,7 +94,7 @@ class coco(IMDB):
         self.annotations_file = main_controller.ANNOTATIONS_FILE_NAME
         self.coco = COCO(self.annotations_file)
         categories = self.coco.loadCats(self.coco.getCatIds())
-        self.CLASSES = [category['name'] for category in categories]
+        self.CLASS_NAMES_AVAILABLE = [category['name'] for category in categories]
         self.CATEGORIES = set([category['supercategory'] for category in categories])
         assert type(main_controller.BATCH_CLASSES) == list and len(main_controller.BATCH_CLASSES)>0,\
             "Provide a list of classes to be learned in this batch through mc.BATCH_CLASSES"
@@ -172,8 +172,9 @@ class coco(IMDB):
                 cx2, cy2 = int(cx + w / 2.0), int(cy + h / 2.0)
                 cv2.rectangle(im, (cx1, cy1), (cx2, cy2), color=256, thickness=1)
                 if not labels==None:
-                    anns = self.coco.loadCats(ids=labels[idx])[0]
-                    txt = "Tag: {}".format(anns['name'])
+                    batch_id = self.tranform_cocoID2batchID(labels[idx])
+                    label_name = self.BATCH_CLASSES[batch_id[0]]
+                    txt = "Tag: {}".format(label_name)
                     txtSize = cv2.getTextSize(txt, font, fontScale, thickness)[0]
                     cv2.putText(im, txt,
                                 (int((cx1+cx2-txtSize[0])/2.0),
@@ -181,6 +182,12 @@ class coco(IMDB):
                                      if cy1-txtSize[1]-text_bound>text_bound else cy1+txtSize[1]+text_bound),
                                 font, fontScale, 255, thickness=thickness)
         plt.imshow(im)
+
+    def tranform_cocoID2batchID(self, ids):
+        anns = self.coco.loadCats(ids=ids)
+        label_names = [ann['name'] for ann in anns]
+        batch_class_ids = [self.BATCH_CLASSES.index(v) for v in label_names]
+        return batch_class_ids
 
 if __name__ == "__main__":
 
@@ -190,7 +197,7 @@ if __name__ == "__main__":
     mc = edict()
     mc.BATCH_SIZE = 10
     mc.ANNOTATIONS_FILE_NAME = '/Users/aponamaryov/Downloads/coco_train_2014/annotations/instances_train2014.json'
-    mc.BATCH_CLASSES = ['person', 'car']
+    mc.BATCH_CLASSES = ['person', 'car', 'bicycle']
     mc.OUTPUT_RES = (32, 32)
     mc.IMAGES_PATH = '/Users/aponamaryov/Downloads/coco_train_2014/images'
     c = coco(coco_name="train",
