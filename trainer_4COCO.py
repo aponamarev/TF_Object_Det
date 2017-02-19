@@ -4,6 +4,7 @@ import cv2
 import os
 import tensorflow as tf
 import numpy as np
+from src.dataset import coco
 # import conversion from sparse to dense arrays
 from src.utils.util import sparse_to_dense, convertToFixedSize, bbox_transform, bgr_to_rgb
 
@@ -13,17 +14,19 @@ FLAGS = tf.app.flags.FLAGS
 
 # setup defaults and the description
 # define data set flags
-tf.app.flags.DEFINE_string('dataset', 'KITTI',
-                       """Currently only support KITTI dataset.""")
-tf.app.flags.DEFINE_string('data_path', '/Users/aponamaryov/GitHub/squeezeDet/data/KITTI', """Root directory of data""")
-tf.app.flags.DEFINE_string('image_set', 'train',
-                       """ Can be train, trainval, val, or test""")
-tf.app.flags.DEFINE_boolean('augmentation', False, " Define as True if you intend to use data augmentation.")
+tf.app.flags.DEFINE_string('dataset', 'COCO',
+                       """This trainier addopted specifically for COCO dataset. Please use other trainers for other datasets.""")
+tf.app.flags.DEFINE_string('IMAGES_PATH', '/Users/aponamaryov/Downloads/coco_train_2014/images',
+                           """Provide a path to where the images are stored.""")
+tf.app.flags.DEFINE_string('ANNOTATIONS_FILE_NAME', '/Users/aponamaryov/Downloads/coco_train_2014/annotations/instances_train2014.json',
+                           """Please provide an absolute path to the annotations file.""")
+
 
 # define network flags
 tf.app.flags.DEFINE_string('net', 'squeezeDet',
                        """Neural net architecture. """)
-tf.app.flags.DEFINE_string('pretrained_model_path', '',
+tf.app.flags.DEFINE_string('pretrained_model_path',
+                           '/Users/aponamaryov/GitHub/TF_SqueezeDet_ObjectDet/data/model_checkpoints/squeezeDet/model.ckpt-87000',
                        """Path to the pretrained model.""")
 
 # define training flags
@@ -106,22 +109,35 @@ def defineComputGraph(FLAGS):
     # import visualization function
 
     # 1. Check that the provided dataset can be processed
-    assert FLAGS.dataset in ['KITTI'], \
-        'Currently only support KITTI dataset'
+    assert FLAGS.dataset in ['KITTI','COCO'], \
+        'Currently only support KITTI and COCO datasets'
     assert FLAGS.net in ['vgg16', 'resnet50', 'squeezeDet', 'squeezeDet+'], \
         'Selected neural net architecture not supported: {}'.format(FLAGS.net)
 
     graph = tf.Graph()
     with graph.as_default():
 
+        # 3. Initilize a image database
+        if FLAGS.dataset == 'KITTI':
+            imdb = kitti(data_path=FLAGS.data_path, image_set=FLAGS.image_set, mc=mc)
+        if FLAGS.dataset == 'COCO':
+            mc = kitti_squeezeDet_config()
+            mc.IMAGES_PATH = FLAGS.IMAGES_PATH
+            mc.ANNOTATIONS_FILE_NAME = FLAGS.ANNOTATIONS_FILE_NAME
+            mc.OUTPUT_RES = (63, 63)
+            mc.BATCH_SIZE = 10
+            mc.BATCH_CLASSES = ('person', 'car', 'bicycle')
+            imdb = coco(coco_name='train',
+                        main_controller=mc,
+                        resize_dim=(1024, 1024))
+
         # 2. Setup a config and the model for squeezeDet
         if FLAGS.net == 'squeezeDet':
-            mc = kitti_squeezeDet_config()
             mc.PRETRAINED_MODEL_PATH = FLAGS.pretrained_model_path
+            mc.CLASSES = 3
+            mc.IMAGE_WIDTH, mc.IMAGE_HEIGHT = imdb.resize.dimension_targets
             model = SqueezeDet(mc, FLAGS.gpu)
 
-        # 3. Initilize a image database
-        imdb = kitti(data_path=FLAGS.data_path, image_set=FLAGS.image_set, mc=mc)
         return graph, model, imdb, mc
 
 def train():
@@ -142,6 +158,8 @@ def train():
         # 2. Initialize variables in the model and merge all summaries
         tf.initialize_all_variables().run()
         saver = tf.train.Saver(tf.all_variables())
+        #saver.restore(sess, FLAGS.pretrained_model_path)
+
         summary_op = tf.merge_all_summaries()
 
         tf.train.start_queue_runners(sess=sess)
@@ -150,11 +168,13 @@ def train():
 
         for step in xrange(FLAGS.max_steps):
             # 3. Read a minibatch of data
-            image_per_batch, \
-            label_per_batch, \
-            box_delta_per_batch, \
-            aidx_per_batch, \
-            gtbbox_per_batch = imdb.read_batch()
+            image_per_batch,\
+            label_per_batch,\
+            gtbbox_per_batch,\
+            aidx_per_batch,\
+            box_delta_per_batch= imdb.read_batch(step=step)
+
+            label_per_batch = [imdb.tranform_cocoID2batchID(v) for v in label_per_batch]
 
             # 4. Convert a 2d arrays of inconsistent size (varies based
             # on n of objests) into a list of tuples or tripples
