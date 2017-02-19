@@ -256,9 +256,9 @@ class imdb_template(object):
         label_per_batch,\
         gtbox_per_batch,\
         aids_per_batch,\
-        deltas_per_batch = [],[],[],[],[]
+        deltas_per_batch = [], [], [], [], []
         mc = self.mc
-        offset = (step * mc.BATCH_SIZE) % (self.provide_epoch_size() - 1)
+        offset = (step * mc.BATCH_SIZE) % (self.provide_epoch_size() - mc.BATCH_SIZE)
         start = offset
         end = start + mc.BATCH_SIZE
 

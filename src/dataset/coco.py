@@ -53,6 +53,7 @@ class coco(IMDB):
     @property
     def BATCH_CLASSES(self):
         return self.__BATCH_CLASSES
+
     @BATCH_CLASSES.setter
     def BATCH_CLASSES(self, values):
         for value in values:
@@ -66,8 +67,7 @@ class coco(IMDB):
         id_array = []
         for class_name in self.__BATCH_CLASSES:
             catIds = self.coco.getCatIds(catNms=[class_name])
-            ids = self.coco.getImgIds(catIds=catIds)
-            id_array.extend(ids)
+            id_array.extend(self.coco.getImgIds(catIds=catIds))
 
         # update image ids
         self.imgIds = id_array
@@ -167,7 +167,7 @@ class coco(IMDB):
 
     def visualization(self, im, labels=None, bboxes=None):
         text_bound = 3
-        fontScale = 0.4
+        fontScale = 0.6
         thickness = 2
         font = cv2.FONT_HERSHEY_SIMPLEX
         if not bboxes == None:
@@ -177,7 +177,8 @@ class coco(IMDB):
                 cx2, cy2 = int(cx + w / 2.0), int(cy + h / 2.0)
                 cv2.rectangle(im, (cx1, cy1), (cx2, cy2), color=256, thickness=1)
                 if not labels==None:
-                    txt = "Tag: {}".format(self.BATCH_CLASSES[labels[idx]])
+                    anns = self.coco.loadCats(ids=labels[idx])[0]
+                    txt = "Tag: {}".format(anns['name'])
                     txtSize = cv2.getTextSize(txt, font, fontScale, thickness)[0]
                     cv2.putText(im, txt,
                                 (int((cx1+cx2-txtSize[0])/2.0),
@@ -215,6 +216,4 @@ if __name__ == "__main__":
     print len(c.anchors)
     c.BATCH_CLASSES = ['person', 'dog', 'cat', 'car']
     print c.BATCH_CLASSES
-    batch = c.read_batch()
     print len(c.imgIds)
-    print batch
