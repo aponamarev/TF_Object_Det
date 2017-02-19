@@ -42,12 +42,9 @@ class coco(IMDB):
         return self.__annotations_file
     @annotations_file.setter
     def annotations_file(self, value):
-        full_path = os.path.join(self.path,
-                                 self.annotations_path)
-        file_path = os.path.join(full_path, value)
-        assert os.path.exists(file_path), "File {} doesn't exis at path {}. Please provide a correct file name at {}" \
-            .format(value, file_path, full_path)
-        self.__annotations_file = file_path
+        assert os.path.exists(value), "Annotations file doesn't exis at path {}. Please provide a full path to annotatinos." \
+            .format(value)
+        self.__annotations_file = value
 
     BATCH_CLASSES = None
     @property
@@ -72,7 +69,7 @@ class coco(IMDB):
         # update image ids
         self.imgIds = id_array
 
-    def __init__(self, coco_name, coco_path, main_controller, shuffle=True, resize_dim=(1024, 1024)):
+    def __init__(self, coco_name, main_controller, shuffle=True, resize_dim=(1024, 1024)):
         """
         COCO class is an adapter for coco dataset that ensures campatibility with ConvDet layer logic.
         The dataset should be initialized with:
@@ -92,8 +89,6 @@ class coco(IMDB):
         self.shuffle = shuffle
 
         #1. Get an array of image indicies
-        self.path = coco_path
-        self.annotations_path = 'annotations'
         assert type(main_controller.ANNOTATIONS_FILE_NAME)==str,\
             "Provide a name of the file containing annotations in mc.ANNOTATIONS_FILE_NAME"
         self.annotations_file = main_controller.ANNOTATIONS_FILE_NAME
@@ -194,15 +189,13 @@ if __name__ == "__main__":
 
     mc = edict()
     mc.BATCH_SIZE = 10
-    mc.ANNOTATIONS_FILE_NAME = 'instances_train2014.json'
+    mc.ANNOTATIONS_FILE_NAME = '/Users/aponamaryov/Downloads/coco_train_2014/annotations/instances_train2014.json'
     mc.BATCH_CLASSES = ['person', 'car']
     mc.OUTPUT_RES = (32, 32)
     mc.IMAGES_PATH = '/Users/aponamaryov/Downloads/coco_train_2014/images'
     c = coco(coco_name="train",
-             coco_path='/Users/aponamaryov/GitHub/coco',
              main_controller=mc)
     print "The name of the dataset: {}".format(c.name)
-    print "The dataset is located at: {}".format(c.path)
     print "Batch provides images for:  \n", c.BATCH_CLASSES
     image_per_batch,\
     label_per_batch,\
