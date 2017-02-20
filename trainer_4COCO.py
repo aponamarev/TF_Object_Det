@@ -1,7 +1,6 @@
 # enable import using multiline statements (useful when import many items in one statement)
 from __future__ import absolute_import
-import cv2
-import os
+import cv2, os, time
 import tensorflow as tf
 import numpy as np
 from src.dataset import coco
@@ -26,11 +25,11 @@ tf.app.flags.DEFINE_string('ANNOTATIONS_FILE_NAME', '/Users/aponamaryov/Download
 tf.app.flags.DEFINE_string('net', 'squeezeDet',
                        """Neural net architecture. """)
 tf.app.flags.DEFINE_string('pretrained_model_path',
-                           '/Users/aponamaryov/GitHub/TF_SqueezeDet_ObjectDet/data/model_checkpoints/squeezeDet/model.ckpt-87000',
+                           '/Users/aponamaryov/GitHub/TF_SqueezeDet_ObjectDet/logs/squeezeDet1024x1024/train/model.ckpt-0',
                        """Path to the pretrained model.""")
 
 # define training flags
-tf.app.flags.DEFINE_string('train_dir', './logs/squeezeDet/train',
+tf.app.flags.DEFINE_string('train_dir', 'logs/squeezeDet1024x1024/train',
                         """Directory where to write event logs and checkpoint.""")
 tf.app.flags.DEFINE_integer('max_steps', 1000000,
                         """Maximum number of batches to run.""")
@@ -119,20 +118,24 @@ def defineComputGraph(FLAGS):
 
         # 3. Initilize a image database
         if FLAGS.dataset == 'KITTI':
+            mc = kitti_squeezeDet_config()
             imdb = kitti(data_path=FLAGS.data_path, image_set=FLAGS.image_set, mc=mc)
         if FLAGS.dataset == 'COCO':
             mc = kitti_squeezeDet_config()
+            mc.DEBUG_MODE = True
             mc.IMAGES_PATH = FLAGS.IMAGES_PATH
             mc.ANNOTATIONS_FILE_NAME = FLAGS.ANNOTATIONS_FILE_NAME
-            mc.OUTPUT_RES = (63, 63)
+            mc.OUTPUT_RES = (40, 40)
             mc.BATCH_SIZE = 10
-            mc.BATCH_CLASSES = ('person', 'car', 'bicycle')
+            mc.BATCH_CLASSES = ['person', 'car', 'bicycle']
             imdb = coco(coco_name='train',
                         main_controller=mc,
-                        resize_dim=(1024, 1024))
+                        resize_dim=(640, 640))
 
         # 2. Setup a config and the model for squeezeDet
         if FLAGS.net == 'squeezeDet':
+            mc.ANCHOR_BOX = imdb.ANCHOR_BOX
+            mc.ANCHORS = len(mc.ANCHOR_BOX)
             mc.PRETRAINED_MODEL_PATH = FLAGS.pretrained_model_path
             mc.CLASSES = 3
             mc.IMAGE_WIDTH, mc.IMAGE_HEIGHT = imdb.resize.dimension_targets
@@ -158,7 +161,6 @@ def train():
         # 2. Initialize variables in the model and merge all summaries
         tf.initialize_all_variables().run()
         saver = tf.train.Saver(tf.all_variables())
-        #saver.restore(sess, FLAGS.pretrained_model_path)
 
         summary_op = tf.merge_all_summaries()
 
@@ -167,14 +169,15 @@ def train():
         summary_writer = tf.train.SummaryWriter(FLAGS.train_dir, sess.graph)
 
         for step in xrange(FLAGS.max_steps):
+
+            start_dataread_tracker = time.time()
+
             # 3. Read a minibatch of data
             image_per_batch,\
             label_per_batch,\
             gtbbox_per_batch,\
             aidx_per_batch,\
             box_delta_per_batch= imdb.read_batch(step=step)
-
-            label_per_batch = [imdb.tranform_cocoID2batchID(v) for v in label_per_batch]
 
             # 4. Convert a 2d arrays of inconsistent size (varies based
             # on n of objests) into a list of tuples or tripples
@@ -188,6 +191,9 @@ def train():
                 box_delta_per_batch=box_delta_per_batch,
                 bbox_per_batch=gtbbox_per_batch
             )
+
+            end_dataread_tracker = time.time()
+
 
             feed_dict = {
                 model.keep_prob: mc.KEEP_PROB,
@@ -227,15 +233,12 @@ def train():
                     model.class_loss
                 ]
 
-                _, \
-                loss_value, \
-                summary_str, \
-                det_boxes, \
-                det_probs, \
-                det_class, \
-                conf_loss, \
-                bbox_loss, \
-                class_loss = sess.run(op_list, feed_dict=feed_dict)
+                start_CNN_tracker = time.time()
+
+                _, loss_value, summary_str, det_boxes, det_probs, det_class, conf_loss, bbox_loss, class_loss = \
+                    sess.run(op_list, feed_dict=feed_dict)
+
+                end_CNN_tracker = time.time()
 
                 _viz_prediction_result(
                     model, image_per_batch, gtbbox_per_batch, label_per_batch, det_boxes,
@@ -246,12 +249,16 @@ def train():
                 summary_writer.add_summary(summary_str, step)
                 summary_writer.add_summary(viz_summary, step)
 
+                #Report results
+                print ('Step: {}... Timer: minibatch data reading: {:.2f}, network pass: {:.1f}. Losses: conf_loss: {:.3f}, bbox_loss: {:.3f}, class_loss: {:.3f} and total_loss: {:.3f}'.
+                       format(step,
+                              end_dataread_tracker-start_dataread_tracker,
+                              end_CNN_tracker - start_CNN_tracker,
+                              conf_loss, bbox_loss, class_loss, loss_value))
+
             else:
-                _, \
-                loss_value, \
-                conf_loss, \
-                bbox_loss, \
-                class_loss = sess.run(
+                _, loss_value, conf_loss, bbox_loss, class_loss = \
+                    sess.run(
                     [model.train_op,
                      model.loss,
                      model.conf_loss,

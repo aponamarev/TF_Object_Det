@@ -43,7 +43,7 @@ def kitti_squeezeDet_config():
   return mc
 
 def set_anchors(mc):
-  H, W, B = 63, 63, 9
+  H, W, B = 64, 64, 9
   anchor_shapes = np.reshape(
       [np.array(
           [[  36.,  37.], [ 366., 174.], [ 115.,  59.],

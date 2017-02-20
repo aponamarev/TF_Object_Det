@@ -10,7 +10,7 @@ from Resize import Resize
 
 class imdb_template(object):
 
-    anchors = []
+    ANCHOR_BOX = []
     INPUT_RES = None
     FEATURE_MAP_SIZE = None
     IMAGES_PATH = "path to be provided"
@@ -19,7 +19,7 @@ class imdb_template(object):
         self.mc = main_controller
         self.FEATURE_MAP_SIZE = feature_map_size  # width, height
         self.INPUT_RES = resize_dim  # width, height
-        self.imread = ImRead()
+        self.imread = ImRead(bgr2rgd_flag=False)
         self.resize = Resize(dimensinos=resize_dim)
 
     @property
@@ -77,8 +77,8 @@ class imdb_template(object):
 
         # check that all the values are set
         try:
-            self.anchors = self.__resize_anchors(IMAGE_SIZE=value,
-                                                 FEATURE_MAP_SIZE=self.FEATURE_MAP_SIZE)  # x,y,h,w,b
+            self.ANCHOR_BOX = self.__resize_anchors(IMAGE_SIZE=value,
+                                                    FEATURE_MAP_SIZE=self.FEATURE_MAP_SIZE)  # x,y,h,w,b
         except AttributeError:
             pass
         except:
@@ -102,8 +102,8 @@ class imdb_template(object):
 
         # check that all the values are set
         try:
-            self.anchors = self.__resize_anchors(IMAGE_SIZE=self.INPUT_RES,
-                                                 FEATURE_MAP_SIZE=value)  # x,y,h,w,b
+            self.ANCHOR_BOX = self.__resize_anchors(IMAGE_SIZE=self.INPUT_RES,
+                                                    FEATURE_MAP_SIZE=value)  # x,y,h,w,b
         except AttributeError:
             pass
         except:
@@ -162,9 +162,9 @@ class imdb_template(object):
         """
         ids_per_img = []
         id_iterator = set()
-        aid = len(self.anchors)
+        aid = len(self.ANCHOR_BOX)
         for box in img_boxes:
-            overlaps = batch_iou(self.anchors, box)
+            overlaps = batch_iou(self.ANCHOR_BOX, box)
             for id in np.argsort(overlaps)[::-1]:
                 if overlaps[id]<=0:
                     break
@@ -176,7 +176,7 @@ class imdb_template(object):
         return ids_per_img
 
     def estimate_deltas(self, bboxes, anchor_ids):
-        """Calculates the deltas of anchors and ground truth boxes.
+        """Calculates the deltas of ANCHOR_BOX and ground truth boxes.
         :param bboxes: an array of ground trueth bounding boxes (bboxes) for an image [center_x, center_y,
         width, height]
         :param anchor_ids: ids per each ground truth box that have the highest IOU
@@ -192,10 +192,10 @@ class imdb_template(object):
             box_cx, box_cy, box_w, box_h = box
             # initialize a delta array [x,y,w,h]
             delta = [0] * 4
-            delta[0] = (box_cx - self.anchors[aid][0]) / box_w
-            delta[1] = (box_cy - self.anchors[aid][1]) / box_h
-            delta[2] = np.log(box_w / self.anchors[aid][2])
-            delta[3] = np.log(box_h / self.anchors[aid][3])
+            delta[0] = (box_cx - self.ANCHOR_BOX[aid][0]) / box_w
+            delta[1] = (box_cy - self.ANCHOR_BOX[aid][1]) / box_h
+            delta[2] = np.log(box_w / self.ANCHOR_BOX[aid][2])
+            delta[3] = np.log(box_h / self.ANCHOR_BOX[aid][3])
             delta_per_img.append(delta)
         return delta_per_img
 
@@ -276,8 +276,6 @@ class imdb_template(object):
             #3. Read and resize an image and annotations
             file_path = os.path.join(self.IMAGES_PATH, file_name)
 
-            im = []
-            labels = []
             gtbboxes = []
             aids = []
             deltas = []
@@ -294,17 +292,15 @@ class imdb_template(object):
                     # calculate deltas for each anchor and add them to the delta_per_batch
                     deltas = self.estimate_deltas(gtbboxes, aids)
 
+                # add the image, labels, bounding boxes, image ANCHOR_BOX, deltas
+                image_per_batch.append(im)
+                label_per_batch.append(labels)
+                gtbox_per_batch.append(gtbboxes)
+                aids_per_batch.append(aids)
+                deltas_per_batch.append(deltas)
+
             except:
                 pass
-
-
-
-            # add the image, labels, bounding boxes, image anchors, deltas
-            image_per_batch.append(im)
-            label_per_batch.append(labels)
-            gtbox_per_batch.append(gtbboxes)
-            aids_per_batch.append(aids)
-            deltas_per_batch.append(deltas)
 
         return image_per_batch, label_per_batch, gtbox_per_batch, aids_per_batch, deltas_per_batch
 
