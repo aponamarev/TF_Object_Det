@@ -1,6 +1,7 @@
 from __future__ import print_function
 import tensorflow as tf
 import os, sys
+import numpy as np
 
 class RestoreVar(object):
 
@@ -14,7 +15,9 @@ class RestoreVar(object):
         Class designed to update variables of the session with the values stored in the checkpoint.
         Variables in the session should be initialized.
 
-        The class also provides a convenience method to update variable with values that don't have corresponding values
+        The class also provides a convenience method (mix_and_match_update) to update a variable with the name that differs
+        from one in the checkpoint.
+
         :param checkpoint_path:
         """
         self.path = checkpoint_path
@@ -65,6 +68,42 @@ class RestoreVar(object):
 
         if self.__debug:
             self.__report()
+
+        return model_vars
+
+    def mix_and_match_update(self, checkpoint_name, target_variable):
+        """
+        Mix and match update finds variables listed [list] in checkpoint_names and assigns them to
+        variables listed in target_variable [list]
+        :param checkpoint_name: - the name of the variable (as string) stored in the checkpoint
+        :param target_variable: - tf.Variable to be updated
+        :return: target_variable
+        """
+        #Check the type of provided parameters
+        assert type(target_variable) == tf.Variable,\
+            "tf.Variable expected in target_variable. {} type was provided".\
+            format(type(target_variable))
+
+            # Check the type of provided parameters
+        assert type(checkpoint_name) == str,\
+            "checkpoint_name is expecting string. {} was provided.".format(type(checkpoint_name).__name__)
+        assert self.checkpoint.has_tensor(checkpoint_name),\
+            "Incorrect name provided in checkpoint_name. Name {} doesn't exist in the checkpoint.".\
+                format(checkpoint_name)
+
+        # Check the consistency of dimensions
+        var_shape = target_variable.get_shape()
+        assert self.checkpoint_vars_and_shapes[checkpoint_name] == var_shape,\
+            "Checkpoint variable {} and target variable {} have inconsistent shapes => {} vs. {}".\
+                format(checkpoint_name, target_variable.op.name, self.checkpoint_vars_and_shapes[checkpoint_name], var_shape)
+        # Extract stored variable from the checkpoint
+        checkpoint_var_values = self.checkpoint.get_tensor(checkpoint_name)
+
+        return target_variable.assign(checkpoint_var_values)
+
+
+
+
 
     def __report(self):
         print("Update of corresponding variables was executed with the following results:")
@@ -121,7 +160,7 @@ if __name__ == "__main__":
 
         conv1, w = conv(input_img, 3, 64, 2, name="conv1")
         model.append(w[0])
-        conv2, w = conv(input_img, 3, 16, 2, name="conv2")
+        conv2, w = conv(input_img, 3, 64, 2, name="conv2")
         model.append(w[0])
         conv3, w = conv(input_img, 3, 16, 2, name="conv3")
         model.append(w[0])
@@ -133,6 +172,7 @@ if __name__ == "__main__":
     path = '/Users/aponamaryov/GitHub/TF_SqueezeDet_ObjectDet/logs/squeezeDet1024x1024/train/model.ckpt-0'
     RestoreVariables = RestoreVar(path, debug=True)
     RestoreVariables.update_correspoinding_variables(model)
+    model[1] = RestoreVariables.mix_and_match_update('conv1/kernels', model[1])
 
     with tf.Session(graph=graph, config=tf.ConfigProto(allow_soft_placement=True)) as sess:
 
@@ -142,5 +182,9 @@ if __name__ == "__main__":
             print(mvar.op.name + ":", mvar.get_shape())
 
         extracted_var = model[0]
+        print(extracted_var.op.name)
+        print(extracted_var.eval())
+        print("\n")
+        extracted_var = model[1]
         print(extracted_var.op.name)
         print(extracted_var.eval())
