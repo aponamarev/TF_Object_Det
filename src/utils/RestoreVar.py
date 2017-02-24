@@ -1,3 +1,4 @@
+from __future__ import print_function
 import tensorflow as tf
 import os, sys
 
@@ -8,22 +9,22 @@ class RestoreVar(object):
     __different_shape_vars = []
     __missing_from_checkpoint_vars = []
 
-    def __init__(self, checkpoint_path, model_vars, debug=False):
+    def __init__(self, checkpoint_path, debug=False):
         """
         Class designed to update variables of the session with the values stored in the checkpoint.
         Variables in the session should be initialized.
 
         The class also provides a convenience method to update variable with values that don't have corresponding values
         :param checkpoint_path:
-        :param sess:
         """
         self.path = checkpoint_path
-        self.model_vars = model_vars
 
         try:
             self.checkpoint = tf.train.NewCheckpointReader(self.path)
+            # Set names of checkpoint variables
+            self.checkpoint_vars_and_shapes = self.checkpoint.get_variable_to_shape_map()
         except:
-            print "Unexpected error:", sys.exc_info()[0]
+            print("RestoreVar object initialization failed. Unexpected error:", sys.exc_info()[0])
             raise
         self.__debug = debug
 
@@ -36,15 +37,12 @@ class RestoreVar(object):
         assert os.path.exists(value), "Provided path doesn't exist. Please check the path: {}".format(value)
         self.__path = value
 
-    def update_correspoinding_variables(self):
+    def update_correspoinding_variables(self, model_vars):
         """
         Updates graph variables with corresponding values from the checkpoint.
+
+        :param model_vars - a list of variables that should be automatically update
         """
-
-        # Get names of checkpoint variables
-        checkpoint_vars_and_shapes = self.checkpoint.get_variable_to_shape_map()
-
-        model_vars = self.model_vars
 
         # Loop through the graph variables and check if they exist in check point
         for i, mvar in enumerate(model_vars):
@@ -52,7 +50,7 @@ class RestoreVar(object):
             # Check if the shape matches
             if self.checkpoint.has_tensor(mvar_name):
                 mvar_shape = mvar.get_shape()
-                checkvar_shape = checkpoint_vars_and_shapes[mvar_name]
+                checkvar_shape = self.checkpoint_vars_and_shapes[mvar_name]
                 if mvar_shape == checkvar_shape:
                     # track matched variables
                     checkpoint_tensor = self.checkpoint.get_tensor(mvar_name)
@@ -69,19 +67,18 @@ class RestoreVar(object):
             self.__report()
 
     def __report(self):
-        print "Update of corresponding variables was executed with the following results:"
-        print "{} variables updated successfully:".format(len(self.__matched_vars))
+        print("Update of corresponding variables was executed with the following results:")
+        print("{} variables updated successfully:".format(len(self.__matched_vars)))
         for var in self.__matched_vars:
-            print "   {} with the shape:".format(var.op.name), var.get_shape()
-        print ""
-        print "{} variables were found in the checkpoint but had different shape:".format(len(self.__different_shape_vars))
+            print("   {} with the shape:".format(var.op.name), var.get_shape())
+        print("{} variables were found in the checkpoint but had different shape:".\
+              format(len(self.__different_shape_vars)),"\n")
         for var in self.__different_shape_vars:
-            print "   {} with the shape:".format(var[0].op.name), var[0].get_shape(),\
-                "had the following shape in the checkpoint:", var[1]
-        print ""
-        print "{} variables from the graph weren't fond in the checkpoint:".format(len(self.__missing_from_checkpoint_vars))
+            print("   {} with the shape:".format(var[0].op.name), var[0].get_shape(),\
+                "had the following shape in the checkpoint:", var[1])
+        print("\n{} variables from the graph weren't fond in the checkpoint:".format(len(self.__missing_from_checkpoint_vars)))
         for var in self.__missing_from_checkpoint_vars:
-            print "   {} with the shape:".format(var.op.name), var.get_shape()
+            print("   {} with the shape:".format(var.op.name), var.get_shape())
 
 
 
@@ -92,7 +89,6 @@ if __name__ == "__main__":
 
         input_channels = input_var.get_shape()[3]
         if not type(input_channels) == int:
-            print type(input_channels)
             input_channels = input_channels.value
 
         with tf.variable_scope(name):
@@ -135,16 +131,16 @@ if __name__ == "__main__":
         model.append(w[0])
 
     path = '/Users/aponamaryov/GitHub/TF_SqueezeDet_ObjectDet/logs/squeezeDet1024x1024/train/model.ckpt-0'
-    RestoreVariables = RestoreVar(path, model, debug=True)
-    RestoreVariables.update_correspoinding_variables()
+    RestoreVariables = RestoreVar(path, debug=True)
+    RestoreVariables.update_correspoinding_variables(model)
 
     with tf.Session(graph=graph, config=tf.ConfigProto(allow_soft_placement=True)) as sess:
 
         tf.global_variables_initializer().run()
 
         for mvar in model:
-            print mvar.op.name + ":", mvar.get_shape()
+            print(mvar.op.name + ":", mvar.get_shape())
 
         extracted_var = model[0]
-        print extracted_var.op.name
-        print extracted_var.eval()
+        print(extracted_var.op.name)
+        print(extracted_var.eval())
