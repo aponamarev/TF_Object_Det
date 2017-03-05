@@ -234,7 +234,7 @@ class ModelSkeleton:
             self._activation_summary(ymaxs, 'box_ymax_bbox_pred')
 
             self.det_boxes = tf.transpose(
-                tf.pack(util.bbox_transform_inv([xmins, ymins, xmaxs, ymaxs])),
+                tf.stack(util.bbox_transform_inv([xmins, ymins, xmaxs, ymaxs])),
                 (1, 2, 0), name='bbox_pred_xmin_ymin_xmax_ymax'
             )
 
