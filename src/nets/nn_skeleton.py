@@ -170,7 +170,7 @@ class ModelSkeleton:
 
     with tf.variable_scope('bbox_pred') as scope:
         with tf.variable_scope('stretching'):
-            delta_x, delta_y, delta_w, delta_h = tf.unpack(
+            delta_x, delta_y, delta_w, delta_h = tf.unstack(
                 self.pred_box_delta, axis=2
             )
             # mc.ANCHOR_BOX is an array of ANCHOR_BOX that is built as 22x76x9_anchors = [15048, 4]
@@ -511,7 +511,7 @@ class ModelSkeleton:
         print ('Cannot find {} in the pretrained model. Use randomly initialized '
                'parameters'.format(layer_name))
 
-    if mc.DEBUG_MODE:
+    if mc.DEBUG:
       print('Input tensor shape to {}: {}'.format(layer_name, inputs.get_shape()))
 
     with tf.variable_scope(layer_name) as scope:
@@ -520,7 +520,7 @@ class ModelSkeleton:
       # re-order the caffe kernel with shape [out, in, h, w] -> tf kernel with
       # shape [h, w, in, out]
       if use_pretrained_param:
-        if mc.DEBUG_MODE:
+        if mc.DEBUG:
           print ('Using pretrained model for {}'.format(layer_name))
         kernel_init = tf.constant(kernel_val , dtype=tf.float32)
         bias_init = tf.constant(bias_val, dtype=tf.float32)
@@ -619,7 +619,7 @@ class ModelSkeleton:
         kernel_val = cw[layer_name][0]
         bias_val = cw[layer_name][1]
 
-    if mc.DEBUG_MODE:
+    if mc.DEBUG:
       print('Input tensor shape to {}: {}'.format(layer_name, inputs.get_shape()))
 
     with tf.variable_scope(layer_name) as scope:
@@ -663,7 +663,7 @@ class ModelSkeleton:
                    'use randomly initialized parameter'.format(layer_name))
 
       if use_pretrained_param:
-        if mc.DEBUG_MODE:
+        if mc.DEBUG:
           print ('Using pretrained model for {}'.format(layer_name))
         kernel_init = tf.constant(kernel_val, dtype=tf.float32)
         bias_init = tf.constant(bias_val, dtype=tf.float32)
