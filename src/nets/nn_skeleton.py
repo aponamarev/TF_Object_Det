@@ -251,10 +251,10 @@ class ModelSkeleton:
           intersection = tf.multiply(w, h, name='intersection')
 
         with tf.variable_scope('union'):
-          w1 = tf.sub(box1[2], box1[0], name='w1')
-          h1 = tf.sub(box1[3], box1[1], name='h1')
-          w2 = tf.sub(box2[2], box2[0], name='w2')
-          h2 = tf.sub(box2[3], box2[1], name='h2')
+          w1 = tf.subtract(box1[2], box1[0], name='w1')
+          h1 = tf.subtract(box1[3], box1[1], name='h1')
+          w2 = tf.subtract(box2[2], box2[0], name='w2')
+          h2 = tf.subtract(box2[3], box2[1], name='h2')
 
           union = w1*h1 + w2*h2 - intersection
 
