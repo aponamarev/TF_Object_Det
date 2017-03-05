@@ -41,9 +41,9 @@ class SqueezeDet(ModelSkeleton):
 
     conv1 = self._conv_layer(
         'conv1', self.image_input, filters=64, size=3, stride=2,
-        padding='VALID', freeze=True)
+        padding='SAME', freeze=True)
     pool1 = self._pooling_layer(
-        'pool1', conv1, size=3, stride=2, padding='VALID')
+        'pool1', conv1, size=3, stride=2, padding='SAME')
 
     fire2 = self._fire_layer(
         'fire2', pool1, s1x1=16, e1x1=64, e3x3=64, freeze=False)
@@ -52,14 +52,14 @@ class SqueezeDet(ModelSkeleton):
     #combination of convolution with stride of 1 and pooling with stride 2 is more expensive as compared to
     #applying a convolution with stride of 2 directly
     pool3 = self._pooling_layer(
-        'pool3', fire3, size=3, stride=2, padding='VALID')
+        'pool3', fire3, size=3, stride=2, padding='SAME')
 
     fire4 = self._fire_layer(
         'fire4', pool3, s1x1=32, e1x1=128, e3x3=128, freeze=False)
     fire5 = self._fire_layer(
         'fire5', fire4, s1x1=32, e1x1=128, e3x3=128, freeze=False)
     pool5 = self._pooling_layer(
-        'pool5', fire5, size=3, stride=2, padding='VALID')
+        'pool5', fire5, size=3, stride=2, padding='SAME')
 
     fire6 = self._fire_layer(
         'fire6', pool5, s1x1=48, e1x1=192, e3x3=192, freeze=False)
@@ -111,4 +111,4 @@ class SqueezeDet(ModelSkeleton):
 
     """ Expansion layers will be concatenated below"""
 
-    return tf.concat(3, [ex1x1, ex3x3], name=layer_name+'/concat')
+    return tf.concat([ex1x1, ex3x3], 3, name=layer_name+'/concat')
