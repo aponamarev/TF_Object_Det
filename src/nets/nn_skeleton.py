@@ -263,8 +263,8 @@ class ModelSkeleton:
 
       self.ious = self.ious.assign(
           _tensor_iou(
-              util.bbox_transform(tf.unpack(self.det_boxes, axis=2)),
-              util.bbox_transform(tf.unpack(self.box_input, axis=2))
+              util.bbox_transform(tf.stack(self.det_boxes, axis=2)),
+              util.bbox_transform(tf.stack(self.box_input, axis=2))
           )
       )
       self._activation_summary(self.ious, 'IOU_score')
