@@ -65,7 +65,7 @@ def _variable_with_weight_decay(name, shape, wd, initializer, trainable=True):
   """
   var = _variable_on_device(name, shape, initializer, trainable)
   if wd is not None and trainable:
-    weight_decay = tf.mul(tf.nn.l2_loss(var), wd, name='weight_loss')
+    weight_decay = tf.multiply(tf.nn.l2_loss(var), wd, name='weight_loss')
     tf.add_to_collection('losses', weight_decay)
   return var
 
@@ -173,7 +173,7 @@ class ModelSkeleton:
             delta_x, delta_y, delta_w, delta_h = tf.unpack(
                 self.pred_box_delta, axis=2
             )
-            # mc.ANCHOR_BOX is an array of anchors that is built as 22x76x9_anchors = [15048, 4]
+            # mc.ANCHOR_BOX is an array of ANCHOR_BOX that is built as 22x76x9_anchors = [15048, 4]
             anchor_x = mc.ANCHOR_BOX[:, 0] #0 is for x
             anchor_y = mc.ANCHOR_BOX[:, 1] #1 is for y
             anchor_w = mc.ANCHOR_BOX[:, 2] #2 is for w
@@ -248,7 +248,7 @@ class ModelSkeleton:
 
           w = tf.maximum(0.0, xmax-xmin, name='inter_w')
           h = tf.maximum(0.0, ymax-ymin, name='inter_h')
-          intersection = tf.mul(w, h, name='intersection')
+          intersection = tf.multiply(w, h, name='intersection')
 
         with tf.variable_scope('union'):
           w1 = tf.sub(box1[2], box1[0], name='w1')
@@ -272,7 +272,7 @@ class ModelSkeleton:
     with tf.variable_scope('probability_ClassAndConfidence') as scope:
       self._activation_summary(self.pred_class_probs, 'class_probs')
 
-      probs = tf.mul(
+      probs = tf.multiply(
           self.pred_class_probs,
           tf.reshape(self.pred_conf, [mc.BATCH_SIZE, mc.ANCHORS, 1]),
           name='final_class_prob_IOUxclassProbability'
