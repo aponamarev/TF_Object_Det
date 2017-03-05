@@ -372,8 +372,7 @@ class ModelSkeleton:
         name='image_to_show'
     )
     self.viz_op = tf.summary.image('sample_detection_results',
-        self.image_to_show, collections='image_summary',
-        max_images=mc.BATCH_SIZE)
+        self.image_to_show, collections='image_summary', max_outputs=mc.BATCH_SIZE)
 
   def _conv_bn_layer(
       self, inputs, conv_param_name, bn_param_name, scale_param_name, filters,
