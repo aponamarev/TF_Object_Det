@@ -747,13 +747,8 @@ class ModelSkeleton:
       nothing
     """
     with tf.variable_scope('activation_summary') as scope:
-      tf.histogram_summary(
-          'activation_summary/'+layer_name, x)
-      tf.scalar_summary(
-          'activation_summary/'+layer_name+'/sparsity', tf.nn.zero_fraction(x))
-      tf.scalar_summary(
-          'activation_summary/'+layer_name+'/average', tf.reduce_mean(x))
-      tf.scalar_summary(
-          'activation_summary/'+layer_name+'/max', tf.reduce_max(x))
-      tf.scalar_summary(
-          'activation_summary/'+layer_name+'/min', tf.reduce_min(x))
+      tf.summary.histogram('activation_summary/'+layer_name, x)
+      tf.summary.scalar('activation_summary/'+layer_name+'/sparsity', tf.nn.zero_fraction(x))
+      tf.summary.scalar('activation_summary/'+layer_name+'/average', tf.reduce_mean(x))
+      tf.summary.scalar('activation_summary/'+layer_name+'/max', tf.reduce_max(x))
+      tf.summary.scalar('activation_summary/'+layer_name+'/min', tf.reduce_min(x))
