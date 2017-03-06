@@ -101,7 +101,7 @@ def base_model_config(dataset='PASCAL_VOC'):
   # path to load the pre-trained model
   cfg.PRETRAINED_MODEL_PATH = ''
 
-  # print log to console in debug mode
+  # print log to console in __debug mode
   cfg.DEBUG_MODE = False
 
   # a small value used to prevent numerical instability

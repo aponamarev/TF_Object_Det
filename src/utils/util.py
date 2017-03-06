@@ -242,7 +242,7 @@ def convertToFixedSize(aidx_per_batch, label_per_batch, box_delta_per_batch, bbo
     for im_num in xrange(len(label_per_batch)):
         for lbl_num in xrange(len(label_per_batch[im_num])):
             label_counter += 1
-            # To keep a track of added label/anchors create a list of anchors
+            # To keep a track of added label/ANCHOR_BOX create a list of ANCHOR_BOX
             # (for each image [i]) corresponding to objects
             ojb_anchor_id = aidx_per_batch[im_num][lbl_num]
             obj_label = label_per_batch[im_num][lbl_num]

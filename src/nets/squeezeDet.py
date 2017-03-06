@@ -17,9 +17,9 @@ import tensorflow as tf
 from src.nets.nn_skeleton import ModelSkeleton
 
 class SqueezeDet(ModelSkeleton):
-  def __init__(self, mc, gpu_id):
+  def __init__(self, mc, gpu_id, inputs_dict):
     with tf.device('/gpu:{}'.format(gpu_id)):
-      ModelSkeleton.__init__(self, mc) # Initializes inputs
+      ModelSkeleton.__init__(self, mc, inputs_dict) # Initializes inputs
 
       self._add_forward_graph() # creates a simple network (with fire layers) with the last conv layer stored in
       # self.pred. self.pred has 72 feature maps: 9_boxes * ( 3_classes + 4_deltas + 1_confidence_score )
@@ -40,13 +40,18 @@ class SqueezeDet(ModelSkeleton):
       self.caffemodel_weight = joblib.load(mc.PRETRAINED_MODEL_PATH)
 
     conv1 = self._conv_layer(
-        'conv1', self.image_input, filters=64, size=3, stride=2,
+        'conv1', self.image_input, filters=32, size=3, stride=2,
         padding='SAME', freeze=True)
+
     pool1 = self._pooling_layer(
         'pool1', conv1, size=3, stride=2, padding='SAME')
 
+    conv2 = self._conv_layer(
+        'conv2', pool1, filters=64, size=3, stride=2,
+        padding='SAME', freeze=True)
+
     fire2 = self._fire_layer(
-        'fire2', pool1, s1x1=16, e1x1=64, e3x3=64, freeze=False)
+        'fire2', conv2, s1x1=16, e1x1=64, e3x3=64, freeze=False)
     fire3 = self._fire_layer(
         'fire3', fire2, s1x1=16, e1x1=64, e3x3=64, freeze=False)
     #combination of convolution with stride of 1 and pooling with stride 2 is more expensive as compared to

@@ -1,9 +1,9 @@
 # enable import using multiline statements (useful when import many items in one statement)
 from __future__ import absolute_import
-import cv2, os, time
+import cv2, os, time, threading
 import tensorflow as tf
 import numpy as np
-from src.dataset import coco
+from src.dataset.COCO_Reader import coco
 # import conversion from sparse to dense arrays
 from src.utils.util import sparse_to_dense, convertToFixedSize, bbox_transform, bgr_to_rgb
 
@@ -85,7 +85,9 @@ def _viz_prediction_result(model, images, bboxes, labels, batch_det_bbox,
                 for idx, prob in zip(det_class, det_prob)],
             (0, 0, 255))
 
-def defineComputGraph(FLAGS):
+
+
+def defineComputGraph(FLAGS, computational_graph):
     """
     1. Check that the provided dataset can be processed
     2. Setup a config and the model for squeezeDet
@@ -105,7 +107,6 @@ def defineComputGraph(FLAGS):
     from src.dataset import kitti
     # import a net that you'll use
     from src.nets import SqueezeDet
-    # import visualization function
 
     # 1. Check that the provided dataset can be processed
     assert FLAGS.dataset in ['KITTI','COCO'], \
@@ -113,8 +114,7 @@ def defineComputGraph(FLAGS):
     assert FLAGS.net in ['vgg16', 'resnet50', 'squeezeDet', 'squeezeDet+'], \
         'Selected neural net architecture not supported: {}'.format(FLAGS.net)
 
-    graph = tf.Graph()
-    with graph.as_default():
+    with computational_graph.as_default():
 
         # 3. Initilize a image database
         if FLAGS.dataset == 'KITTI':
@@ -122,15 +122,24 @@ def defineComputGraph(FLAGS):
             imdb = kitti(data_path=FLAGS.data_path, image_set=FLAGS.image_set, mc=mc)
         if FLAGS.dataset == 'COCO':
             mc = kitti_squeezeDet_config()
-            mc.DEBUG_MODE = True
+            mc.DEBUG = False
             mc.IMAGES_PATH = FLAGS.IMAGES_PATH
             mc.ANNOTATIONS_FILE_NAME = FLAGS.ANNOTATIONS_FILE_NAME
-            mc.OUTPUT_RES = (40, 40)
+            mc.OUTPUT_RES = (24, 24)
             mc.BATCH_SIZE = 10
             mc.BATCH_CLASSES = ['person', 'car', 'bicycle']
+            # Dimensions for:
+            # imgs, bbox_deltas, masks, dense_labels, bbox_values
+            mc.OUTPUT_SHAPES = [[768, 768, 3],
+                                [mc.OUTPUT_RES[0] * mc.OUTPUT_RES[1] * 9, 4],
+                                [mc.OUTPUT_RES[0] * mc.OUTPUT_RES[1] * 9, 1],
+                                [mc.OUTPUT_RES[0] * mc.OUTPUT_RES[1] * 9, 3],
+                                [mc.OUTPUT_RES[0] * mc.OUTPUT_RES[1] * 9, 4]]
+            mc.OUTPUT_DTYPES = [tf.float32, tf.float32, tf.float32, tf.float32, tf.float32]
             imdb = coco(coco_name='train',
                         main_controller=mc,
-                        resize_dim=(640, 640))
+                        resize_dim=(mc.OUTPUT_SHAPES[0][0], mc.OUTPUT_SHAPES[0][1]),
+                        prefetched_batches = 10)
 
         # 2. Setup a config and the model for squeezeDet
         if FLAGS.net == 'squeezeDet':
@@ -139,9 +148,20 @@ def defineComputGraph(FLAGS):
             mc.PRETRAINED_MODEL_PATH = FLAGS.pretrained_model_path
             mc.CLASSES = 3
             mc.IMAGE_WIDTH, mc.IMAGE_HEIGHT = imdb.resize.dimension_targets
-            model = SqueezeDet(mc, FLAGS.gpu)
 
-        return graph, model, imdb, mc
+            inputs_dict = {'image_input':[], 'input_mask':[], 'box_delta_input':[], 'box_input':[], 'labels':[]}
+
+            inputs_dict['image_input'], inputs_dict['box_delta_input'], inputs_dict['input_mask'], \
+            inputs_dict['labels'], inputs_dict['box_input'] = imdb.get_batch
+
+            model = SqueezeDet(mc, FLAGS.gpu, inputs_dict)
+
+        return model, imdb, mc
+
+def asynchronous_launch(f, arguments):
+    prefetch_tread = threading.Thread(target=f, args=arguments)
+    prefetch_tread.isDaemon()
+    prefetch_tread.start()
 
 def train():
     """ Executes training procedure that includes:
@@ -153,70 +173,37 @@ def train():
             6. Save the model checkpoint periodically.
     """
 
-    # 1. Create a computational graph, model, database, and a controller
-    graph, model, imdb, mc = defineComputGraph(FLAGS)
-
-    with tf.Session(config=tf.ConfigProto(allow_soft_placement=True), graph=graph) as sess:
-
+    sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True))
+    with sess:
+        # 1. Create a computational graph, model, database, and a controller
+        model, imdb, mc = defineComputGraph(FLAGS, computational_graph=sess.graph)
         # 2. Initialize variables in the model and merge all summaries
-        tf.initialize_all_variables().run()
-        saver = tf.train.Saver(tf.all_variables())
+        # old version - tf.initialize_all_variables().run()
+        initializer = tf.global_variables_initializer()
+        sess.run(initializer)
+        # old version - saver = tf.train.Saver(tf.all_variables())
+        saver = tf.train.Saver(tf.global_variables())
 
-        summary_op = tf.merge_all_summaries()
+        summary_op = tf.summary.merge_all()
 
-        tf.train.start_queue_runners(sess=sess)
+        # Prefetch data
+        # Enqueue one batch sequentially to ensure that there is at least one batch in the pipeline
+        imdb.enqueue_batch(sess)
+        # Now enqueue additional 6 batches for the buffer asynchronously
+        for _ in range(6):
+            asynchronous_launch(imdb.enqueue_batch, [sess])
 
-        summary_writer = tf.train.SummaryWriter(FLAGS.train_dir, sess.graph)
+        summary_writer = tf.summary.FileWriter(FLAGS.train_dir, sess.graph)
+
+        # Launch coordinator that will manage threads
+        coord = tf.train.Coordinator()
+        threads = tf.train.start_queue_runners(sess=sess, coord=coord)
+
+        print("Beginning training process.")
+
+        feed_dict = {model.keep_prob: mc.KEEP_PROB}
 
         for step in xrange(FLAGS.max_steps):
-
-            start_dataread_tracker = time.time()
-
-            # 3. Read a minibatch of data
-            image_per_batch,\
-            label_per_batch,\
-            gtbbox_per_batch,\
-            aidx_per_batch,\
-            box_delta_per_batch= imdb.read_batch(step=step)
-
-            # 4. Convert a 2d arrays of inconsistent size (varies based
-            # on n of objests) into a list of tuples or tripples
-            label_indices, \
-            bbox_indices, \
-            box_delta_values, \
-            mask_indices, \
-            box_values = convertToFixedSize(
-                aidx_per_batch=aidx_per_batch,
-                label_per_batch=label_per_batch,
-                box_delta_per_batch=box_delta_per_batch,
-                bbox_per_batch=gtbbox_per_batch
-            )
-
-            end_dataread_tracker = time.time()
-
-
-            feed_dict = {
-                model.keep_prob: mc.KEEP_PROB,
-
-                model.image_input: image_per_batch,
-
-                model.input_mask: np.reshape(
-                    sparse_to_dense(mask_indices,[mc.BATCH_SIZE, mc.ANCHORS],
-                                    np.ones(len(mask_indices), dtype=np.float)),
-                    [mc.BATCH_SIZE, mc.ANCHORS, 1]),
-
-                model.box_delta_input: sparse_to_dense(
-                    bbox_indices, [mc.BATCH_SIZE, mc.ANCHORS, 4],
-                    box_delta_values),
-
-                model.box_input: sparse_to_dense(
-                    bbox_indices, [mc.BATCH_SIZE, mc.ANCHORS, 4],
-                    box_values),
-
-                model.labels: sparse_to_dense(
-                    label_indices, [mc.BATCH_SIZE, mc.ANCHORS, mc.CLASSES],
-                    np.ones(len(label_indices), dtype=np.float))
-            }
 
             # 5. Configure operation that TF should run depending on the step number
             if step % FLAGS.summary_step == 0:
@@ -240,30 +227,20 @@ def train():
 
                 end_CNN_tracker = time.time()
 
-                _viz_prediction_result(
-                    model, image_per_batch, gtbbox_per_batch, label_per_batch, det_boxes,
-                    det_class, det_probs)
-                image_per_batch = bgr_to_rgb(image_per_batch)
-                viz_summary = sess.run(
-                    model.viz_op, feed_dict={model.image_to_show: image_per_batch})
+                viz_summary = sess.run(model.viz_op, feed_dict={model.image_to_show: model.image_input.eval()})
                 summary_writer.add_summary(summary_str, step)
                 summary_writer.add_summary(viz_summary, step)
 
                 #Report results
-                print ('Step: {}... Timer: minibatch data reading: {:.2f}, network pass: {:.1f}. Losses: conf_loss: {:.3f}, bbox_loss: {:.3f}, class_loss: {:.3f} and total_loss: {:.3f}'.
-                       format(step,
-                              end_dataread_tracker-start_dataread_tracker,
+                print ('Step: {}. Timer: 1 network pass (with batch size {}): {:.1f} seconds. Losses: conf_loss: {:.3f}, bbox_loss: {:.3f}, class_loss: {:.3f} and total_loss: {:.3f}'.
+                       format(step, imdb.mc.BATCH_SIZE,
                               end_CNN_tracker - start_CNN_tracker,
                               conf_loss, bbox_loss, class_loss, loss_value))
 
             else:
                 _, loss_value, conf_loss, bbox_loss, class_loss = \
-                    sess.run(
-                    [model.train_op,
-                     model.loss,
-                     model.conf_loss,
-                     model.bbox_loss,
-                     model.class_loss], feed_dict=feed_dict)
+                    sess.run([model.train_op, model.loss, model.conf_loss, model.bbox_loss, model.class_loss],
+                             feed_dict=feed_dict)
 
             assert not np.isnan(loss_value), \
                 'Model diverged. Total loss: {}, conf_loss: {}, bbox_loss: {}, ' \
@@ -271,11 +248,18 @@ def train():
 
             # 6. Save the model checkpoint periodically.
             if step % FLAGS.checkpoint_step == 0 or (step + 1) == FLAGS.max_steps:
-                viz_summary = sess.run(model.viz_op, feed_dict={model.image_to_show: image_per_batch})
+                viz_summary = sess.run(model.viz_op, feed_dict={model.image_to_show: model.image_input.eval()})
                 summary_writer.add_summary(summary_str, step)
                 summary_writer.add_summary(viz_summary, step)
                 checkpoint_path = os.path.join(FLAGS.train_dir, 'model.ckpt')
                 saver.save(sess, checkpoint_path, global_step=step)
+
+        # Close a queue and cancel all elements in the queue. Request coordinator to stop all the threads.
+        sess.run(imdb.queue.close(cancel_pending_enqueues=True))
+        coord.request_stop()
+        # Tell coordinator to stop any queries to the threads
+        coord.join(threads)
+    sess.close()
 
 
 if __name__ == '__main__':

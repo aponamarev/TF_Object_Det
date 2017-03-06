@@ -71,30 +71,45 @@ def _variable_with_weight_decay(name, shape, wd, initializer, trainable=True):
 
 class ModelSkeleton:
   """Base class of NN detection models."""
-  def __init__(self, mc):
+  def __init__(self, mc, inputs_dict):
     self.mc = mc
 
     # image batch input
+    '''
     self.image_input = tf.placeholder(
         tf.float32, [mc.BATCH_SIZE, mc.IMAGE_HEIGHT, mc.IMAGE_WIDTH, 3],
         name='image_input'
     )
+    '''
+    self.image_input = inputs_dict['image_input']
     # a scalar tensor in range (0, 1]. Usually set to 0.5 in training phase and
     # 1.0 in evaluation phase
     self.keep_prob = tf.placeholder(tf.float32, name='keep_prob')
     # A tensor where an element is 1 if the corresponding box is "responsible"
     # for detection an object and 0 otherwise.
+    '''
     self.input_mask = tf.placeholder(
         tf.float32, [mc.BATCH_SIZE, mc.ANCHORS, 1], name='box_mask')
+        '''
+    self.input_mask = inputs_dict['input_mask']
     # Tensor used to represent bounding box deltas.
+    '''
     self.box_delta_input = tf.placeholder(
         tf.float32, [mc.BATCH_SIZE, mc.ANCHORS, 4], name='gt_bbox_delta_input')
+        '''
+    self.box_delta_input = inputs_dict['box_delta_input']
+
     # Tensor used to represent bounding box coordinates.
+    '''
     self.box_input = tf.placeholder(
-        tf.float32, [mc.BATCH_SIZE, mc.ANCHORS, 4], name='gt_box_values_input')
+        tf.float32, [mc.BATCH_SIZE, mc.ANCHORS, 4], name='gt_box_values_input')'''
+    self.box_input = inputs_dict['box_input']
     # Tensor used to represent labels
+    '''
     self.labels = tf.placeholder(
         tf.float32, [mc.BATCH_SIZE, mc.ANCHORS, mc.CLASSES], name='labels')
+        '''
+    self.labels = inputs_dict['labels']
     # Tensor representing the IOU between predicted bbox and gt bbox
     self.ious = tf.Variable(
         initial_value=np.zeros((mc.BATCH_SIZE, mc.ANCHORS)), trainable=False,
