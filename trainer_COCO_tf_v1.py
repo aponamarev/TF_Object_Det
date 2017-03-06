@@ -156,6 +156,11 @@ def train():
 
         feed_dict = {model.keep_prob: mc.KEEP_PROB}
 
+        pass_tracker_start = time.time()
+        pass_tracker_prior = pass_tracker_start
+
+        prior_step = 0
+
         for step in xrange(FLAGS.max_steps):
 
             asynchronous_launch(imdb.enqueue_batch, [sess])
@@ -175,27 +180,30 @@ def train():
                     model.class_loss
                 ]
 
-                start_CNN_tracker = time.time()
-
                 _, loss_value, summary_str, det_boxes, det_probs, det_class, conf_loss, bbox_loss, class_loss = \
                     sess.run(op_list, feed_dict=feed_dict)
 
-                end_CNN_tracker = time.time()
+                pass_tracker_end = time.time()
 
                 viz_summary = sess.run(model.viz_op, feed_dict={model.image_to_show: model.image_input.eval()})
                 summary_writer.add_summary(summary_str, step)
                 summary_writer.add_summary(viz_summary, step)
 
                 #Report results
-                print ('Step: {}. Timer: 1 network pass (with batch size {}): {:.1f} seconds. Losses: conf_loss: {:.3f}, bbox_loss: {:.3f}, class_loss: {:.3f} and total_loss: {:.3f}'.
-                       format(step, imdb.mc.BATCH_SIZE,
-                              end_CNN_tracker - start_CNN_tracker,
+                number_of_steps = step - prior_step
+                number_of_steps = number_of_steps if number_of_steps > 0 else 1
+                print('Step: {}. Timer: {} network passes (with batch size {}): {:.1f} seconds ({:.1f} per batch). Losses: conf_loss: {:.3f}, bbox_loss: {:.3f}, class_loss: {:.3f} and total_loss: {:.3f}'.
+                       format(step, number_of_steps, imdb.mc.BATCH_SIZE,
+                              pass_tracker_end - pass_tracker_prior, (pass_tracker_end - pass_tracker_prior)/number_of_steps,
                               conf_loss, bbox_loss, class_loss, loss_value))
+                pass_tracker_prior = pass_tracker_end
+                prior_step = step
 
             else:
                 _, loss_value, conf_loss, bbox_loss, class_loss = \
                     sess.run([model.train_op, model.loss, model.conf_loss, model.bbox_loss, model.class_loss],
                              feed_dict=feed_dict)
+                print(".")
 
             assert not np.isnan(loss_value), \
                 'Model diverged. Total loss: {}, conf_loss: {}, bbox_loss: {}, ' \
