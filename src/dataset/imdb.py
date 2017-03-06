@@ -105,7 +105,7 @@ class imdb(object):
       label_per_batch: labels. Shape: batch_size x object_num
       delta_per_batch: bounding box deltas. Shape: batch_size x object_num x 
           [dx ,dy, dw, dh]
-      aidx_per_batch: index of anchors that are responsible for prediction.
+      aidx_per_batch: index of ANCHOR_BOX that are responsible for prediction.
           Shape: batch_size x object_num
       bbox_per_batch: scaled bounding boxes. Shape: batch_size x object_num x 
           [cx, cy, w, h]
