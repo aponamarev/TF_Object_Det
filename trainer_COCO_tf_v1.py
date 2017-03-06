@@ -39,53 +39,6 @@ tf.app.flags.DEFINE_integer('checkpoint_step', 1000,
                         """Number of steps to save summary.""")
 tf.app.flags.DEFINE_string('gpu', '0', """gpu id.""")
 
-def _draw_box(im, box_list, label_list, color=(0,255,0), cdict=None, form='center'):
-    assert form == 'center' or form == 'diagonal', 'bounding box format not accepted: {}.'.format(form)
-
-    for bbox, label in zip(box_list, label_list):
-
-        if form == 'center':
-            bbox = bbox_transform(bbox)
-
-        xmin, ymin, xmax, ymax = [int(b) for b in bbox]
-
-        l = label.split(':')[0] # text before "CLASS: (PROB)"
-        if cdict and l in cdict:
-            c = cdict[l]
-        else:
-            c = color
-
-        # draw box
-        cv2.rectangle(im, (xmin, ymin), (xmax, ymax), c, 1)
-        # draw label
-        font = cv2.FONT_HERSHEY_SIMPLEX
-        cv2.putText(im, label, (xmin, ymax), font, 0.3, c, 1)
-
-def _viz_prediction_result(model, images, bboxes, labels, batch_det_bbox,
-                           batch_det_class, batch_det_prob):
-    mc = model.mc
-
-    for i in range(len(images)):
-        # draw ground truth
-        _draw_box(images[i], bboxes[i], [mc.CLASS_NAMES[idx] for idx in labels[i]], (0, 255, 0))
-
-        # draw prediction
-        det_bbox, det_prob, det_class = model.filter_prediction(
-            batch_det_bbox[i], batch_det_prob[i], batch_det_class[i])
-
-        keep_idx    = [idx for idx in range(len(det_prob)) \
-                          if det_prob[idx] > mc.PLOT_PROB_THRESH]
-        det_bbox    = [det_bbox[idx] for idx in keep_idx]
-        det_prob    = [det_prob[idx] for idx in keep_idx]
-        det_class   = [det_class[idx] for idx in keep_idx]
-
-        _draw_box(
-            images[i], det_bbox,
-            [mc.CLASS_NAMES[idx]+': (%.2f)'% prob \
-                for idx, prob in zip(det_class, det_prob)],
-            (0, 0, 255))
-
-
 
 def defineComputGraph(FLAGS, computational_graph):
     """
@@ -204,6 +157,8 @@ def train():
         feed_dict = {model.keep_prob: mc.KEEP_PROB}
 
         for step in xrange(FLAGS.max_steps):
+
+            asynchronous_launch(imdb.enqueue_batch, [sess])
 
             # 5. Configure operation that TF should run depending on the step number
             if step % FLAGS.summary_step == 0:
