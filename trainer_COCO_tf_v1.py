@@ -1,5 +1,5 @@
 # enable import using multiline statements (useful when import many items in one statement)
-from __future__ import absolute_import
+from __future__ import absolute_import, print_function
 import cv2, os, time, threading
 import tensorflow as tf
 import numpy as np
@@ -91,8 +91,7 @@ def defineComputGraph(FLAGS, computational_graph):
             mc.OUTPUT_DTYPES = [tf.float32, tf.float32, tf.float32, tf.float32, tf.float32]
             imdb = coco(coco_name='train',
                         main_controller=mc,
-                        resize_dim=(mc.OUTPUT_SHAPES[0][0], mc.OUTPUT_SHAPES[0][1]),
-                        prefetched_batches = 10)
+                        resize_dim=(mc.OUTPUT_SHAPES[0][0], mc.OUTPUT_SHAPES[0][1]))
 
         # 2. Setup a config and the model for squeezeDet
         if FLAGS.net == 'squeezeDet':
@@ -111,17 +110,12 @@ def defineComputGraph(FLAGS, computational_graph):
 
         return model, imdb, mc
 
-def asynchronous_launch(f, arguments):
-    prefetch_tread = threading.Thread(target=f, args=arguments)
-    prefetch_tread.isDaemon()
-    prefetch_tread.start()
-
 def train():
     """ Executes training procedure that includes:
             1. Create a computational graph, model, database, and a controller
             2. Initialize variables in the model and merge all summaries
             3. Read a minibatch of data
-            4. Convert a 2d arrays of inconsistent size (varies based on n of objests) into a list of tuples or tripples
+            4. Convert a 2d arrays of inconsistent size (varies based on n of objects) into a list of tuples or tripples
             5. Configure operation that TF should run depending on the step number
             6. Save the model checkpoint periodically.
     """
@@ -130,6 +124,7 @@ def train():
     with sess:
         # 1. Create a computational graph, model, database, and a controller
         model, imdb, mc = defineComputGraph(FLAGS, computational_graph=sess.graph)
+        print("Beginning training process.")
         # 2. Initialize variables in the model and merge all summaries
         # old version - tf.initialize_all_variables().run()
         initializer = tf.global_variables_initializer()
@@ -141,18 +136,14 @@ def train():
 
         # Prefetch data
         # Enqueue one batch sequentially to ensure that there is at least one batch in the pipeline
-        imdb.enqueue_batch(sess)
-        # Now enqueue additional 6 batches for the buffer asynchronously
-        for _ in range(6):
-            asynchronous_launch(imdb.enqueue_batch, [sess])
+        print("... filling in the data pipeline with minibatches. It may take some time.")
+        imdb.fill_queue(sess)
 
         summary_writer = tf.summary.FileWriter(FLAGS.train_dir, sess.graph)
 
         # Launch coordinator that will manage threads
         coord = tf.train.Coordinator()
         threads = tf.train.start_queue_runners(sess=sess, coord=coord)
-
-        print("Beginning training process.")
 
         feed_dict = {model.keep_prob: mc.KEEP_PROB}
 
@@ -163,7 +154,9 @@ def train():
 
         for step in xrange(FLAGS.max_steps):
 
-            asynchronous_launch(imdb.enqueue_batch, [sess])
+            #print("Number of elements in the queue: {}".format(imdb.queue.size().eval()))
+
+            imdb.fill_queue(sess)
 
             # 5. Configure operation that TF should run depending on the step number
             if step % FLAGS.summary_step == 0:
@@ -192,7 +185,7 @@ def train():
                 #Report results
                 number_of_steps = step - prior_step
                 number_of_steps = number_of_steps if number_of_steps > 0 else 1
-                print('Step: {}. Timer: {} network passes (with batch size {}): {:.1f} seconds ({:.1f} per batch). Losses: conf_loss: {:.3f}, bbox_loss: {:.3f}, class_loss: {:.3f} and total_loss: {:.3f}'.
+                print('\nStep: {}. Timer: {} network passes (with batch size {}): {:.1f} seconds ({:.1f} per batch). Losses: conf_loss: {:.3f}, bbox_loss: {:.3f}, class_loss: {:.3f} and total_loss: {:.3f}'.
                        format(step, number_of_steps, imdb.mc.BATCH_SIZE,
                               pass_tracker_end - pass_tracker_prior, (pass_tracker_end - pass_tracker_prior)/number_of_steps,
                               conf_loss, bbox_loss, class_loss, loss_value))
@@ -203,7 +196,7 @@ def train():
                 _, loss_value, conf_loss, bbox_loss, class_loss = \
                     sess.run([model.train_op, model.loss, model.conf_loss, model.bbox_loss, model.class_loss],
                              feed_dict=feed_dict)
-                print(".")
+                print(".", end="")
 
             assert not np.isnan(loss_value), \
                 'Model diverged. Total loss: {}, conf_loss: {}, bbox_loss: {}, ' \
@@ -227,4 +220,4 @@ def train():
 
 if __name__ == '__main__':
     train()
-    print "code was executed successfully."
+    print("code was executed successfully.")
