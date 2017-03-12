@@ -1,11 +1,10 @@
 # enable import using multiline statements (useful when import many items in one statement)
-from __future__ import absolute_import, print_function
-import cv2, os, time, threading
+import os, time, threading
 import tensorflow as tf
 import numpy as np
-from src.dataset.COCO_Reader import coco
+from src.dataset.COCO_Reader.coco import coco
 # import conversion from sparse to dense arrays
-from src.utils.util import sparse_to_dense, convertToFixedSize, bbox_transform, bgr_to_rgb
+# from src.utils.util import sparse_to_dense, convertToFixedSize, bbox_transform, bgr_to_rgb
 
 
 # setup flags that will be used throughout the algorithm
@@ -39,8 +38,14 @@ tf.app.flags.DEFINE_integer('checkpoint_step', 1000,
                         """Number of steps to save summary.""")
 tf.app.flags.DEFINE_string('gpu', '0', """gpu id.""")
 
+def async_launch(f):
+    t = threading.Thread(target=f, args=[])
+    t.isDaemon()
+    t.start()
 
-def defineComputGraph(FLAGS, computational_graph):
+
+
+def defineDataProvider(FLAGS):
     """
     1. Check that the provided dataset can be processed
     2. Setup a config and the model for squeezeDet
@@ -58,8 +63,6 @@ def defineComputGraph(FLAGS, computational_graph):
     from src.config import kitti_squeezeDet_config
     # import dataset class for kitti set
     from src.dataset import kitti
-    # import a net that you'll use
-    from src.nets import SqueezeDet
 
     # 1. Check that the provided dataset can be processed
     assert FLAGS.dataset in ['KITTI','COCO'], \
@@ -67,48 +70,28 @@ def defineComputGraph(FLAGS, computational_graph):
     assert FLAGS.net in ['vgg16', 'resnet50', 'squeezeDet', 'squeezeDet+'], \
         'Selected neural net architecture not supported: {}'.format(FLAGS.net)
 
-    with computational_graph.as_default():
+    # 3. Initilize a image database
+    if FLAGS.dataset == 'KITTI':
+        mc = kitti_squeezeDet_config()
+        imdb = kitti(data_path=FLAGS.data_path, image_set=FLAGS.image_set, mc=mc)
+    if FLAGS.dataset == 'COCO':
+        mc = kitti_squeezeDet_config()
+        mc.DEBUG = False
+        mc.IMAGES_PATH = FLAGS.IMAGES_PATH
+        mc.ANNOTATIONS_FILE_NAME = FLAGS.ANNOTATIONS_FILE_NAME
+        mc.OUTPUT_RES = (24, 24)
+        mc.BATCH_SIZE = 10
+        mc.BATCH_CLASSES = ['person', 'car', 'bicycle']
+        imdb = coco(coco_name='train',
+                    main_controller=mc,
+                    resize_dim=(768, 768))
+        mc.ANCHOR_BOX = imdb.ANCHOR_BOX
+        mc.ANCHORS = len(mc.ANCHOR_BOX)
+        mc.PRETRAINED_MODEL_PATH = FLAGS.pretrained_model_path
+        mc.CLASSES = len(imdb.CLASS_NAMES_AVAILABLE)
+        mc.IMAGE_WIDTH, mc.IMAGE_HEIGHT = imdb.resize.dimension_targets
 
-        # 3. Initilize a image database
-        if FLAGS.dataset == 'KITTI':
-            mc = kitti_squeezeDet_config()
-            imdb = kitti(data_path=FLAGS.data_path, image_set=FLAGS.image_set, mc=mc)
-        if FLAGS.dataset == 'COCO':
-            mc = kitti_squeezeDet_config()
-            mc.DEBUG = False
-            mc.IMAGES_PATH = FLAGS.IMAGES_PATH
-            mc.ANNOTATIONS_FILE_NAME = FLAGS.ANNOTATIONS_FILE_NAME
-            mc.OUTPUT_RES = (24, 24)
-            mc.BATCH_SIZE = 10
-            mc.BATCH_CLASSES = ['person', 'car', 'bicycle']
-            # Dimensions for:
-            # imgs, bbox_deltas, masks, dense_labels, bbox_values
-            mc.OUTPUT_SHAPES = [[768, 768, 3],
-                                [mc.OUTPUT_RES[0] * mc.OUTPUT_RES[1] * 9, 4],
-                                [mc.OUTPUT_RES[0] * mc.OUTPUT_RES[1] * 9, 1],
-                                [mc.OUTPUT_RES[0] * mc.OUTPUT_RES[1] * 9, 3],
-                                [mc.OUTPUT_RES[0] * mc.OUTPUT_RES[1] * 9, 4]]
-            mc.OUTPUT_DTYPES = [tf.float32, tf.float32, tf.float32, tf.float32, tf.float32]
-            imdb = coco(coco_name='train',
-                        main_controller=mc,
-                        resize_dim=(mc.OUTPUT_SHAPES[0][0], mc.OUTPUT_SHAPES[0][1]))
-
-        # 2. Setup a config and the model for squeezeDet
-        if FLAGS.net == 'squeezeDet':
-            mc.ANCHOR_BOX = imdb.ANCHOR_BOX
-            mc.ANCHORS = len(mc.ANCHOR_BOX)
-            mc.PRETRAINED_MODEL_PATH = FLAGS.pretrained_model_path
-            mc.CLASSES = 3
-            mc.IMAGE_WIDTH, mc.IMAGE_HEIGHT = imdb.resize.dimension_targets
-
-            inputs_dict = {'image_input':[], 'input_mask':[], 'box_delta_input':[], 'box_input':[], 'labels':[]}
-
-            inputs_dict['image_input'], inputs_dict['box_delta_input'], inputs_dict['input_mask'], \
-            inputs_dict['labels'], inputs_dict['box_input'] = imdb.get_batch
-
-            model = SqueezeDet(mc, FLAGS.gpu, inputs_dict)
-
-        return model, imdb, mc
+        return imdb, mc
 
 def train():
     """ Executes training procedure that includes:
@@ -122,8 +105,85 @@ def train():
 
     sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True))
     with sess:
-        # 1. Create a computational graph, model, database, and a controller
-        model, imdb, mc = defineComputGraph(FLAGS, computational_graph=sess.graph)
+        # 1. Create a dataset and a controller
+        imdb, mc = defineDataProvider(FLAGS)
+        with tf.name_scope("placeholder"):
+            # Define placeholder for data prefetching
+            placeholder_im = tf.placeholder(dtype=tf.float32,
+                                            shape=[imdb.resize.dimension_targets[0], imdb.resize.dimension_targets[0], 3],
+                                            name="img")
+            placeholder_labels = tf.placeholder(dtype=tf.float32,
+                                                shape=[len(imdb.ANCHOR_BOX), len(imdb.CLASS_NAMES_AVAILABLE)],
+                                                name='labels')
+            placeholder_aids = tf.placeholder(dtype=tf.float32,
+                                              shape=[len(imdb.ANCHOR_BOX), 1],
+                                              name='anchor_ids')
+            placeholder_deltas = tf.placeholder(dtype=tf.float32,
+                                                shape=[len(imdb.ANCHOR_BOX), 4],
+                                                name='anchor_deltas')
+            placeholder_bbox_values = tf.placeholder(dtype=tf.float32,
+                                                     shape=[len(imdb.ANCHOR_BOX), 4],
+                                                     name='bbox_values')
+        # define how many examples do we want to prefetch
+        capacity = mc.BATCH_SIZE * 10
+
+        q = tf.FIFOQueue(
+            capacity=capacity,
+            dtypes=[placeholder_im.dtype,placeholder_labels.dtype,placeholder_aids.dtype,placeholder_deltas.dtype,placeholder_bbox_values.dtype],
+            shapes=[placeholder_im.get_shape(),
+                    placeholder_labels.get_shape(),
+                    placeholder_aids.get_shape(),
+                    placeholder_deltas.get_shape(),
+                    placeholder_bbox_values.get_shape()]
+        )
+
+        enqueue_op = q.enqueue(
+            [placeholder_im,
+             placeholder_labels,
+             placeholder_aids,
+             placeholder_deltas,
+             placeholder_bbox_values]
+        )
+        dequeue_op = q.dequeue()
+
+        # define a method to prefetch the data
+        def fill_q():
+            while capacity>sess.run(q.size()):
+                im, labels, aids, deltas, bbox_values = imdb.get_sample()
+                feed_dict = {placeholder_im:im,
+                             placeholder_labels:labels,
+                             placeholder_aids:aids,
+                             placeholder_deltas:deltas,
+                             placeholder_bbox_values:bbox_values}
+                sess.run(enqueue_op, feed_dict=feed_dict)
+
+        # launch prefetching of the queue
+        print("... filling in the data pipeline with minibatches. It may take some time.")
+        fill_q()
+
+        # define the feeding minibatch
+        img_per_batch,\
+        labels_per_batch,\
+        aids_per_batch,\
+        deltas_per_batch,\
+        bbox_values_per_batch = tf.train.batch(dequeue_op, mc.BATCH_SIZE, capacity=int(capacity/2),
+                                               shapes=[placeholder_im.get_shape(),
+                                                       placeholder_labels.get_shape(),
+                                                       placeholder_aids.get_shape(),
+                                                       placeholder_deltas.get_shape(),
+                                                       placeholder_bbox_values.get_shape()])
+        input_dict = {'image_input': img_per_batch,
+                       'input_mask': aids_per_batch,
+                       'box_delta_input': deltas_per_batch,
+                       'box_input': bbox_values_per_batch,
+                       'labels': labels_per_batch}
+
+        if FLAGS.net == 'squeezeDet':
+            # import a net that you'll use
+            from src.nets.squeezeDet import SqueezeDet
+
+            model = SqueezeDet(mc, FLAGS.gpu, input_dict)
+        # Setup a config and the model for squeezeDet
         print("Beginning training process.")
         # 2. Initialize variables in the model and merge all summaries
         # old version - tf.initialize_all_variables().run()
@@ -133,11 +193,6 @@ def train():
         saver = tf.train.Saver(tf.global_variables())
 
         summary_op = tf.summary.merge_all()
-
-        # Prefetch data
-        # Enqueue one batch sequentially to ensure that there is at least one batch in the pipeline
-        print("... filling in the data pipeline with minibatches. It may take some time.")
-        imdb.fill_queue(sess)
 
         summary_writer = tf.summary.FileWriter(FLAGS.train_dir, sess.graph)
 
@@ -152,11 +207,7 @@ def train():
 
         prior_step = 0
 
-        for step in xrange(FLAGS.max_steps):
-
-            #print("Number of elements in the queue: {}".format(imdb.queue.size().eval()))
-
-            imdb.fill_queue(sess)
+        for step in range(FLAGS.max_steps):
 
             # 5. Configure operation that TF should run depending on the step number
             if step % FLAGS.summary_step == 0:
@@ -209,6 +260,9 @@ def train():
                 summary_writer.add_summary(viz_summary, step)
                 checkpoint_path = os.path.join(FLAGS.train_dir, 'model.ckpt')
                 saver.save(sess, checkpoint_path, global_step=step)
+
+            # Prefetch data
+            async_launch(fill_q)
 
         # Close a queue and cancel all elements in the queue. Request coordinator to stop all the threads.
         sess.run(imdb.queue.close(cancel_pending_enqueues=True))

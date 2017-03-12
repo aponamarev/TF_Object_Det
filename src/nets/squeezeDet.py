@@ -1,18 +1,7 @@
 # Author: Bichen Wu (bichen@berkeley.edu) 08/25/2016
 
 """SqueezeDet model."""
-
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
-import os
-import sys
-
 import joblib
-from src.utils import util
-from easydict import EasyDict as edict
-import numpy as np
 import tensorflow as tf
 from src.nets.nn_skeleton import ModelSkeleton
 

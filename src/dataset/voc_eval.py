@@ -8,7 +8,7 @@
 
 import xml.etree.ElementTree as ET
 import os
-import cPickle
+import _pickle as cPickle
 import numpy as np
 
 def parse_rec(filename):
@@ -47,7 +47,7 @@ def voc_ap(rec, prec, use_07_metric=False):
             ap = ap + p / 11.
     else:
         # correct AP calculation
-        # first append sentinel values at the end
+        # first append sentinel values at the end_timer
         mrec = np.concatenate(([0.], rec, [1.]))
         mpre = np.concatenate(([0.], prec, [0.]))
 
@@ -110,10 +110,10 @@ def voc_eval(detpath,
         for i, imagename in enumerate(imagenames):
             recs[imagename] = parse_rec(annopath.format(imagename))
             if i % 100 == 0:
-                print 'Reading annotation for {:d}/{:d}'.format(
-                    i + 1, len(imagenames))
+                print('Reading annotation for {:d}/{:d}'.format(
+                    i + 1, len(imagenames)))
         # save
-        print 'Saving cached annotations to {:s}'.format(cachefile)
+        print('Saving cached annotations to {:s}'.format(cachefile))
         with open(cachefile, 'w') as f:
             cPickle.dump(recs, f)
     else:

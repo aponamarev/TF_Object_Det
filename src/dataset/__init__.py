@@ -1,2 +1,1 @@
-from kitti import kitti
-from pascal_voc import pascal_voc
+__author__ = "Alex Ponamarev"
