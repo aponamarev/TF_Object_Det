@@ -166,7 +166,7 @@ def train():
         labels_per_batch,\
         aids_per_batch,\
         deltas_per_batch,\
-        bbox_values_per_batch = tf.train.batch(dequeue_op, mc.BATCH_SIZE, capacity=int(capacity/2),
+        bbox_values_per_batch = tf.train.batch(dequeue_op, mc.BATCH_SIZE, capacity=4,
                                                shapes=[placeholder_im.get_shape(),
                                                        placeholder_labels.get_shape(),
                                                        placeholder_aids.get_shape(),
