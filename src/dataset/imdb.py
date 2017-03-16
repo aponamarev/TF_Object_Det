@@ -151,7 +151,7 @@ class imdb(object):
 
       if mc.DATA_AUGMENTATION:
         assert mc.DRIFT_X >= 0 and mc.DRIFT_Y > 0, \
-            'mc.DRIFT_X and mc.DRIFT_Y must be >= 0'
+            'MC.DRIFT_X and MC.DRIFT_Y must be >= 0'
 
         if mc.DRIFT_X > 0 or mc.DRIFT_Y > 0:
           # Ensures that gt boundibg box is not cutted out of the image

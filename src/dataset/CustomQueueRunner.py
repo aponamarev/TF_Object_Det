@@ -54,15 +54,15 @@ class CustomQueueRunner(object):
                                         shape=[n_boxes, 4],
                                         name="bbox_values")]
         # Define the queue and it's ops
-        self.__q = tf.FIFOQueue(capacity=self.__capacity,
-                                dtypes=[v.dtype for v in self.__inputs],
-                                shapes=[v.get_shape().as_list() for v in self.__inputs])
-        self.dequeue = self.__q.dequeue_many(batch_size, name="Batch_{}samples".format(batch_size))
-        self.__enqueue_op = self.__q.enqueue(self.__inputs)
+        self.queue = tf.FIFOQueue(capacity=self.__capacity,
+                                  dtypes=[v.dtype for v in self.__inputs],
+                                  shapes=[v.get_shape().as_list() for v in self.__inputs])
+        self.dequeue = self.queue.dequeue_many(batch_size, name="Batch_{}samples".format(batch_size))
+        self.__enqueue_op = self.queue.enqueue(self.__inputs)
 
 
     def fill_q(self, sess):
-        while sess.run(self.__q.size())<self.__capacity:
+        while sess.run(self.queue.size())<self.__capacity:
             sess.run(self.__enqueue_op,
                      feed_dict={ps:v for ps,v in zip(self.__inputs, self.provide_sample())})
 

@@ -9,12 +9,12 @@ from .config import base_model_config
 def kitti_model_config():
   """Specify the parameters to tune below."""
   mc                       = base_model_config('KITTI')
-  # mc.IMAGE_WIDTH           = 1864 # half width 621
-  # mc.IMAGE_HEIGHT          = 562 # half height 187
+  # MC.IMAGE_WIDTH           = 1864 # half width 621
+  # MC.IMAGE_HEIGHT          = 562 # half height 187
   mc.IMAGE_WIDTH           = 1242 # half width 621
   mc.IMAGE_HEIGHT          = 375 # half height 187
-  # mc.IMAGE_WIDTH           = 621
-  # mc.IMAGE_HEIGHT          = 187
+  # MC.IMAGE_WIDTH           = 621
+  # MC.IMAGE_HEIGHT          = 187
 
   mc.WEIGHT_DECAY          = 0.0001
   mc.PROB_THRESH           = 0.005

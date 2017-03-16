@@ -77,7 +77,7 @@ class ModelSkeleton:
     # image batch input
     '''
     self.image_input = tf.placeholder(
-        tf.float32, [mc.BATCH_SIZE, mc.IMAGE_HEIGHT, mc.IMAGE_WIDTH, 3],
+        tf.float32, [MC.BATCH_SIZE, MC.IMAGE_HEIGHT, MC.IMAGE_WIDTH, 3],
         name='image_input'
     )
     '''
@@ -89,25 +89,25 @@ class ModelSkeleton:
     # for detection an object and 0 otherwise.
     '''
     self.input_mask = tf.placeholder(
-        tf.float32, [mc.BATCH_SIZE, mc.ANCHORS, 1], name='box_mask')
+        tf.float32, [MC.BATCH_SIZE, MC.ANCHORS, 1], name='box_mask')
         '''
     self.input_mask = inputs_dict['input_mask']
     # Tensor used to represent bounding box deltas.
     '''
     self.box_delta_input = tf.placeholder(
-        tf.float32, [mc.BATCH_SIZE, mc.ANCHORS, 4], name='gt_bbox_delta_input')
+        tf.float32, [MC.BATCH_SIZE, MC.ANCHORS, 4], name='gt_bbox_delta_input')
         '''
     self.box_delta_input = inputs_dict['box_delta_input']
 
     # Tensor used to represent bounding box coordinates.
     '''
     self.box_input = tf.placeholder(
-        tf.float32, [mc.BATCH_SIZE, mc.ANCHORS, 4], name='gt_box_values_input')'''
+        tf.float32, [MC.BATCH_SIZE, MC.ANCHORS, 4], name='gt_box_values_input')'''
     self.box_input = inputs_dict['box_input']
     # Tensor used to represent labels
     '''
     self.labels = tf.placeholder(
-        tf.float32, [mc.BATCH_SIZE, mc.ANCHORS, mc.CLASSES], name='labels')
+        tf.float32, [MC.BATCH_SIZE, MC.ANCHORS, MC.CLASSES], name='labels')
         '''
     self.labels = inputs_dict['labels']
     # Tensor representing the IOU between predicted bbox and gt bbox
@@ -143,7 +143,7 @@ class ModelSkeleton:
         # A tensor where an element is 1 if the corresponding box is "responsible"
         # for detection an object and 0 otherwise.
         self.input_mask = tf.placeholder(
-        tf.float32, [mc.BATCH_SIZE, mc.ANCHORS, 1], name='box_mask')
+        tf.float32, [MC.BATCH_SIZE, MC.ANCHORS, 1], name='box_mask')
       '''
       self.num_objects = tf.reduce_sum(self.input_mask, name='num_objects')
 
@@ -188,7 +188,7 @@ class ModelSkeleton:
             delta_x, delta_y, delta_w, delta_h = tf.unstack(
                 self.pred_box_delta, axis=2
             )
-            # mc.ANCHOR_BOX is an array of ANCHOR_BOX that is built as 22x76x9_anchors = [15048, 4]
+            # MC.ANCHOR_BOX is an array of ANCHOR_BOX that is built as 22x76x9_anchors = [15048, 4]
             anchor_x = mc.ANCHOR_BOX[:, 0] #0 is for x
             anchor_y = mc.ANCHOR_BOX[:, 1] #1 is for y
             anchor_w = mc.ANCHOR_BOX[:, 2] #2 is for w
@@ -230,7 +230,7 @@ class ModelSkeleton:
             '''
             This part makes sure that the predicted values do not extend beyond the images size
             '''
-            # The max x position is mc.IMAGE_WIDTH - 1 since we use zero-based
+            # The max x position is MC.IMAGE_WIDTH - 1 since we use zero-based
             # pixels. Same for y.
             xmins = tf.minimum(
                 tf.maximum(0.0, xmins), mc.IMAGE_WIDTH-1.0, name='bbox_xmin_bbox_pred')
