@@ -29,7 +29,7 @@ tf.app.flags.DEFINE_string('pretrained_model_path',
                            """Path to the pretrained model.""")
 
 # define training flags
-tf.app.flags.DEFINE_string('train_dir', 'logs/squeezeDet1024x1024/train',
+tf.app.flags.DEFINE_string('train_dir', 'logs/train',
                            """Directory where to write event logs and checkpoint.""")
 tf.app.flags.DEFINE_integer('max_steps', 1000000,
                             """Maximum number of batches to run.""")
@@ -70,7 +70,7 @@ def train():
     """
     graph = tf.Graph()
     with graph.as_default():
-
+        #with tf.device("/gpu:{}".format(FLAGS.gpu)):
         # 1. Create a dataset and a controller
         cqr = CQR(IMDB.get_sample, len(IMDB.ANCHOR_BOX), len(IMDB.CLASS_NAMES_AVAILABLE),
                   img_size=[MC.IMAGE_WIDTH, MC.IMAGE_HEIGHT,3],
@@ -84,20 +84,15 @@ def train():
         input_dict['box_input'] = cqr.dequeue
 
         model = NET(MC, FLAGS.gpu, input_dict)
-
-    with tf.Session(config=tf.ConfigProto(allow_soft_placement=True), graph=graph) as sess:
-        # Setup a config and the model for squeezeDet
-        print("Beginning training process.")
         # 2. Initialize variables in the model and merge all summaries
         initializer = tf.global_variables_initializer()
-        sess.run(initializer)
-        # old version - saver = tf.train.Saver(tf.all_variables())
         saver = tf.train.Saver(tf.global_variables())
-
         summary_op = tf.summary.merge_all()
+        summary_writer = tf.summary.FileWriter(FLAGS.train_dir, graph)
 
-        summary_writer = tf.summary.FileWriter(FLAGS.train_dir, sess.graph)
-
+    with tf.Session(config=tf.ConfigProto(allow_soft_placement=True), graph=graph) as sess:
+        print("Beginning training process.")
+        sess.run(initializer)
         # Launch coordinator that will manage threads
         coord = tf.train.Coordinator()
         threads = tf.train.start_queue_runners(sess=sess, coord=coord)
