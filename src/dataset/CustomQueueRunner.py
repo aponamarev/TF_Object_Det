@@ -32,7 +32,7 @@ class CustomQueueRunner(object):
         :param prefetched:
         """
         # Set queue capacity
-        self.__q_capacity = batch_size * prefetched
+        self.q_capacity = batch_size * prefetched
 
         # Assign a method to  be used to generate new sample (singular)
         self.provide_sample = method_provide_sample
@@ -55,7 +55,7 @@ class CustomQueueRunner(object):
                                         name="bbox_values")]
         # Define the queue and it's ops
         shapes = [v.get_shape().as_list() for v in self.__inputs]
-        self.queue = tf.FIFOQueue(capacity=self.__q_capacity,
+        self.queue = tf.FIFOQueue(capacity=self.q_capacity,
                                   dtypes=[v.dtype for v in self.__inputs],
                                   shapes=shapes)
         self.__q_size = self.queue.size()
@@ -94,7 +94,7 @@ class CustomQueueRunner(object):
         :return:
         """
         size = sess.run(self.__q_size)
-        for i in range(self.__q_capacity - size):
+        for i in range(self.q_capacity - size):
             t = th.Thread(target=self.fill_q, args=[sess])
             t.isDaemon()
             t.start()

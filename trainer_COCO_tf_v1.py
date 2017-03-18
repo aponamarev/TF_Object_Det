@@ -47,7 +47,7 @@ MC.IMAGES_PATH = FLAGS.IMAGES_PATH
 MC.ANNOTATIONS_FILE_NAME = FLAGS.ANNOTATIONS_FILE_NAME
 MC.OUTPUT_RES = (24, 24)
 MC.RESIZE_DIM = (768, 768)
-MC.BATCH_SIZE = 10
+MC.BATCH_SIZE = 96
 MC.BATCH_CLASSES = ['person', 'car', 'bicycle']
 
 IMDB = COCO(coco_name='train',
@@ -101,7 +101,11 @@ def train():
     pass_tracker_start = time.time()
     pass_tracker_prior = pass_tracker_start
     print("Prefetching data. It make take some time...")
-    for _ in range(MC.BATCH_SIZE*10): cqr.fill_q(sess)
+    for i in range(cqr.q_capacity):
+        cqr.fill_q(sess)
+        if i % MC.BATCH_SIZE==0:
+            print(".", end="", flush=True)
+    print("\nFinished prefetching")
 
     prior_step = 0
 
@@ -156,7 +160,7 @@ def train():
             summary_writer.add_summary(summary_str, step)
             summary_writer.add_summary(viz_summary, step)
             checkpoint_path = os.path.join(FLAGS.train_dir, 'model.ckpt')
-            saver.save(sess, checkpoint_path, global_step=step)
+            saver.save(sess, checkpoint_path)
 
         # Prefetch data
         cqr.fill_q_async(sess)
