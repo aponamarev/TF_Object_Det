@@ -46,7 +46,7 @@ MC.IMAGES_PATH = FLAGS.IMAGES_PATH
 MC.ANNOTATIONS_FILE_NAME = FLAGS.ANNOTATIONS_FILE_NAME
 MC.OUTPUT_RES = (24, 24)
 MC.RESIZE_DIM = (768, 768)
-MC.BATCH_SIZE = 100
+MC.BATCH_SIZE = 10
 MC.BATCH_CLASSES = ['person', 'car', 'bicycle']
 
 IMDB = COCO(coco_name='train',
@@ -74,7 +74,6 @@ def train():
         cqr = CQR(IMDB.get_sample, len(IMDB.ANCHOR_BOX), len(IMDB.CLASS_NAMES_AVAILABLE),
                   img_size=[MC.IMAGE_WIDTH, MC.IMAGE_HEIGHT,3],
                   batch_size=MC.BATCH_SIZE)
-        q_size = tf.summary.scalar("queue_size",cqr.q_size)
         input_dict = {}
         input_dict['image_input'],\
         input_dict['labels'],\
@@ -100,8 +99,8 @@ def train():
 
     pass_tracker_start = time.time()
     pass_tracker_prior = pass_tracker_start
-
-    cqr.fill_q(sess)
+    print("Prefetching data. It make take some time...")
+    for _ in range(MC.BATCH_SIZE*6): cqr.fill_q(sess)
 
     prior_step = 0
 
@@ -144,7 +143,7 @@ def train():
             _, loss_value, conf_loss, bbox_loss, class_loss = \
                 sess.run([model.train_op, model.loss, model.conf_loss, model.bbox_loss, model.class_loss],
                          feed_dict={model.keep_prob: MC.KEEP_PROB})
-            print(".", end="")
+            print(".", sep=" ",end="")
 
         assert not np.isnan(loss_value), \
             'Model diverged. Total loss: {}, conf_loss: {}, bbox_loss: {}, ' \
