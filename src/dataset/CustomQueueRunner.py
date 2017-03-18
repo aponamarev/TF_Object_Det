@@ -32,7 +32,7 @@ class CustomQueueRunner(object):
         :param prefetched:
         """
         # Set queue capacity
-        self.__capacity = batch_size * prefetched
+        self.__q_capacity = batch_size * prefetched
 
         # Assign a method to  be used to generate new sample (singular)
         self.provide_sample = method_provide_sample
@@ -54,17 +54,25 @@ class CustomQueueRunner(object):
                                         shape=[n_boxes, 4],
                                         name="bbox_values")]
         # Define the queue and it's ops
-        self.queue = tf.FIFOQueue(capacity=self.__capacity,
+        shapes = [v.get_shape().as_list() for v in self.__inputs]
+        self.queue = tf.FIFOQueue(capacity=self.__q_capacity,
                                   dtypes=[v.dtype for v in self.__inputs],
-                                  shapes=[v.get_shape().as_list() for v in self.__inputs])
-        self.dequeue = self.queue.dequeue_many(batch_size, name="Batch_{}samples".format(batch_size))
+                                  shapes=shapes)
+        self.__q_size = self.queue.size()
+        # add summary to observer the state of the prefetching queue
+        tf.summary.scalar("prefetching_queue_size", self.__q_size)
+        self.dequeue = tf.train.batch(self.queue.dequeue(),batch_size,
+                                      num_threads=2,
+                                      capacity=6,
+                                      shapes=shapes,
+                                      name="Batch_{}samples".format(batch_size))
+        #self.dequeue = self.queue.dequeue_many(batch_size, name="Batch_{}samples".format(batch_size))
         self.__enqueue_op = self.queue.enqueue(self.__inputs)
 
 
     def fill_q(self, sess):
-        while sess.run(self.queue.size())<self.__capacity:
-            sess.run(self.__enqueue_op,
-                     feed_dict={ps:v for ps,v in zip(self.__inputs, self.provide_sample())})
+        sess.run(self.__enqueue_op,
+                 feed_dict={ps:v for ps,v in zip(self.__inputs, self.provide_sample())})
 
 
     def fill_q_async(self, sess):
@@ -85,9 +93,11 @@ class CustomQueueRunner(object):
         :param sess: that will run a queue on a parallel thread
         :return:
         """
-        t = th.Thread(target=self.fill_q, args=[sess])
-        t.isDaemon()
-        t.start()
+        size = sess.run(self.__q_size)
+        for i in range(self.__q_capacity - size):
+            t = th.Thread(target=self.fill_q, args=[sess])
+            t.isDaemon()
+            t.start()
 
 if __name__ == "__main__":
 
