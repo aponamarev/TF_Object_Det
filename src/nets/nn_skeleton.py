@@ -382,12 +382,8 @@ class ModelSkeleton:
   def _add_viz_graph(self):
     """Define the visualization operation."""
     mc = self.mc
-    self.image_to_show = tf.placeholder(
-        tf.float32, [None, mc.IMAGE_HEIGHT, mc.IMAGE_WIDTH, 3],
-        name='image_to_show'
-    )
     self.viz_op = tf.summary.image('sample_detection_results',
-        self.image_to_show, collections='image_summary', max_outputs=mc.BATCH_SIZE)
+                                   self.image_input, collections='image_summary', max_outputs=mc.BATCH_SIZE)
 
   def _conv_bn_layer(
       self, inputs, conv_param_name, bn_param_name, scale_param_name, filters,

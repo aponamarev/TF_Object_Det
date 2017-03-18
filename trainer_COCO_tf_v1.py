@@ -1,7 +1,8 @@
 # enable import using multiline statements (useful when import many items in one statement)
-import os, time, threading
+import os, time, cv2
 import tensorflow as tf
 import numpy as np
+from src.utils.util import bbox_transform
 from src.dataset.COCO_Reader.coco import coco as COCO
 from src.dataset.CustomQueueRunner import CustomQueueRunner as CQR
 from src.config.kitti_squeezeDet_config import kitti_squeezeDet_config as KSC
@@ -100,7 +101,7 @@ def train():
     pass_tracker_start = time.time()
     pass_tracker_prior = pass_tracker_start
     print("Prefetching data. It make take some time...")
-    for _ in range(MC.BATCH_SIZE*6): cqr.fill_q(sess)
+    for _ in range(MC.BATCH_SIZE*10): cqr.fill_q(sess)
 
     prior_step = 0
 
@@ -125,7 +126,7 @@ def train():
 
             pass_tracker_end = time.time()
 
-            viz_summary = sess.run(model.viz_op, feed_dict={model.image_to_show: sess.run(model.image_input)})
+            viz_summary = sess.run(model.viz_op)
             summary_writer.add_summary(summary_str, step)
             summary_writer.add_summary(viz_summary, step)
 
@@ -143,7 +144,7 @@ def train():
             _, loss_value, conf_loss, bbox_loss, class_loss = \
                 sess.run([model.train_op, model.loss, model.conf_loss, model.bbox_loss, model.class_loss],
                          feed_dict={model.keep_prob: MC.KEEP_PROB})
-            print(".", sep=" ",end="")
+            print(".", end="", flush=True)
 
         assert not np.isnan(loss_value), \
             'Model diverged. Total loss: {}, conf_loss: {}, bbox_loss: {}, ' \
@@ -151,7 +152,7 @@ def train():
 
         # 6. Save the model checkpoint periodically.
         if step % FLAGS.checkpoint_step == 0 or (step + 1) == FLAGS.max_steps:
-            viz_summary = sess.run(model.viz_op, feed_dict={model.image_to_show: sess.run(model.image_input)})
+            viz_summary = sess.run(model.viz_op)
             summary_writer.add_summary(summary_str, step)
             summary_writer.add_summary(viz_summary, step)
             checkpoint_path = os.path.join(FLAGS.train_dir, 'model.ckpt')
