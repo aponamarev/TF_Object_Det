@@ -360,7 +360,8 @@ class ModelSkeleton:
 
     _add_loss_summaries(self.loss)
 
-    opt = tf.train.MomentumOptimizer(learning_rate=lr, momentum=mc.MOMENTUM)
+    #opt = tf.train.MomentumOptimizer(learning_rate=lr, momentum=mc.MOMENTUM)
+    opt = tf.train.AdamOptimizer(learning_rate=lr)
     grads_vars = opt.compute_gradients(self.loss, tf.trainable_variables())
 
     with tf.variable_scope('clip_gradient') as scope:

@@ -8,7 +8,7 @@ class CustomQueueRunner(object):
                  n_classes,
                  img_size=[640, 640, 3],
                  batch_size=10,
-                 prefetched=6):
+                 prefetched=12):
         """
         CustomQueueRunner class is a utility class designed to prefetch and randomize samples.
 
@@ -62,8 +62,7 @@ class CustomQueueRunner(object):
         # add summary to observer the state of the prefetching queue
         tf.summary.scalar("prefetching_queue_size", self.__q_size)
         self.dequeue = tf.train.batch(self.queue.dequeue(),batch_size,
-                                      num_threads=2,
-                                      capacity=6,
+                                      capacity=batch_size*4+10,
                                       shapes=shapes,
                                       name="Batch_{}samples".format(batch_size))
         #self.dequeue = self.queue.dequeue_many(batch_size, name="Batch_{}samples".format(batch_size))

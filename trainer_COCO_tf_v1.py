@@ -47,7 +47,7 @@ MC.IMAGES_PATH = FLAGS.IMAGES_PATH
 MC.ANNOTATIONS_FILE_NAME = FLAGS.ANNOTATIONS_FILE_NAME
 MC.OUTPUT_RES = (24, 24)
 MC.RESIZE_DIM = (768, 768)
-MC.BATCH_SIZE = 96
+MC.BATCH_SIZE = 64
 MC.BATCH_CLASSES = ['person', 'car', 'bicycle']
 
 IMDB = COCO(coco_name='train',
@@ -93,7 +93,10 @@ def train():
         coord = tf.train.Coordinator()
     graph.finalize()
 
-    sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True), graph=graph)
+    config = tf.ConfigProto()
+    config.gpu_options.allow_growth=True
+    config.allow_soft_placement=True
+    sess = tf.Session(config=config, graph=graph)
     print("Beginning training process.")
     sess.run(initializer)
     threads = tf.train.start_queue_runners(sess=sess, coord=coord)
@@ -130,9 +133,9 @@ def train():
 
             pass_tracker_end = time.time()
 
-            viz_summary = sess.run(model.viz_op)
+            #viz_summary = sess.run(model.viz_op)
             summary_writer.add_summary(summary_str, step)
-            summary_writer.add_summary(viz_summary, step)
+            #summary_writer.add_summary(viz_summary, step)
 
             #Report results
             number_of_steps = step - prior_step
