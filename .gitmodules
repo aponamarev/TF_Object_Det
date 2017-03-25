@@ -1,0 +1,3 @@
+[submodule "src/dataset/COCO_Reader"]
+	path = src/dataset/COCO_Reader
+	url = https://github.com/aponamarev/COCO_Reader.git

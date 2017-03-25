@@ -72,15 +72,16 @@ def train():
     graph = tf.Graph()
     with graph.as_default():
         # 1. Create a dataset and a controller
-        cqr = CQR(IMDB.get_sample, len(IMDB.ANCHOR_BOX), len(IMDB.CLASS_NAMES_AVAILABLE),
-                  img_size=[MC.IMAGE_WIDTH, MC.IMAGE_HEIGHT,3],
-                  batch_size=MC.BATCH_SIZE)
-        input_dict = {}
-        input_dict['image_input'],\
-        input_dict['labels'],\
-        input_dict['input_mask'],\
-        input_dict['box_delta_input'],\
-        input_dict['box_input'] = cqr.dequeue
+        with tf.device("gpu:{}".format(FLAGS.gpu)):
+            cqr = CQR(IMDB.get_sample, len(IMDB.ANCHOR_BOX), len(IMDB.CLASS_NAMES_AVAILABLE),
+                      img_size=[MC.IMAGE_WIDTH, MC.IMAGE_HEIGHT,3],
+                      batch_size=MC.BATCH_SIZE)
+            input_dict = {}
+            input_dict['image_input'],\
+            input_dict['labels'],\
+            input_dict['input_mask'],\
+            input_dict['box_delta_input'],\
+            input_dict['box_input'] = cqr.dequeue
 
         model = NET(MC, FLAGS.gpu, input_dict)
         # 2. Initialize variables in the model and merge all summaries
