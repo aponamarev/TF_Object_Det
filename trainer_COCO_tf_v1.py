@@ -2,7 +2,7 @@
 import os, time, cv2
 import tensorflow as tf
 import numpy as np
-from src.utils.util import bbox_transform
+from tqdm import tqdm
 from src.dataset.COCO_Reader.coco import coco as COCO
 from src.dataset.CustomQueueRunner import CustomQueueRunner as CQR
 from src.config.kitti_squeezeDet_config import kitti_squeezeDet_config as KSC
@@ -47,7 +47,7 @@ MC.IMAGES_PATH = FLAGS.IMAGES_PATH
 MC.ANNOTATIONS_FILE_NAME = FLAGS.ANNOTATIONS_FILE_NAME
 MC.OUTPUT_RES = (24, 24)
 MC.RESIZE_DIM = (768, 768)
-MC.BATCH_SIZE = 64
+MC.BATCH_SIZE = 8
 MC.BATCH_CLASSES = ['person', 'car', 'bicycle']
 
 IMDB = COCO(coco_name='train',
@@ -98,20 +98,19 @@ def train():
     config.gpu_options.allow_growth=True
     config.allow_soft_placement=True
     sess = tf.Session(config=config, graph=graph)
-    print("Beginning training process.")
     sess.run(initializer)
     threads = tf.train.start_queue_runners(sess=sess, coord=coord)
 
     pass_tracker_start = time.time()
     pass_tracker_prior = pass_tracker_start
     print("Prefetching data. It make take some time...")
-    for i in range(cqr.q_capacity):
-        cqr.fill_q(sess)
-        if i % MC.BATCH_SIZE==0:
-            print(".", end="", flush=True)
+    pbar=tqdm(total=cqr.q_capacity, leave=False)
+    for _ in pbar: cqr.fill_q(sess)
+    pbar.close()
     print("\nFinished prefetching")
 
     prior_step = 0
+    print("Beginning training process.")
 
     for step in range(FLAGS.max_steps):
 
@@ -147,12 +146,17 @@ def train():
                           conf_loss, bbox_loss, class_loss, loss_value))
             pass_tracker_prior = pass_tracker_end
             prior_step = step
+            # Start progress report
+            # Update progress manually
+            pbar.close()
+            pbar = tqdm(total=FLAGS.summary_step-1, leave=False)
+            pbar.update()
 
         else:
             _, loss_value, conf_loss, bbox_loss, class_loss = \
                 sess.run([model.train_op, model.loss, model.conf_loss, model.bbox_loss, model.class_loss],
                          feed_dict={model.keep_prob: MC.KEEP_PROB})
-            print(".", end="", flush=True)
+            pbar.update()
 
         assert not np.isnan(loss_value), \
             'Model diverged. Total loss: {}, conf_loss: {}, bbox_loss: {}, ' \
